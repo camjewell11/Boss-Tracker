@@ -2,7 +2,9 @@ package com.camjewell.bosstracker.ui;
 
 import com.camjewell.bosstracker.BossTrackerConfig;
 import com.camjewell.bosstracker.boss.Boss;
+import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.loot.LootTracker;
+import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
 import com.camjewell.bosstracker.session.BossGoal;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.CalcMode;
@@ -10,9 +12,13 @@ import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.session.SessionManager;
 import com.camjewell.bosstracker.util.TimeFormat;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.GridLayout;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,6 +26,7 @@ import java.util.Map;
 import javax.inject.Inject;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.ButtonGroup;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -45,8 +52,10 @@ import net.runelite.client.util.ColorUtil;
 import net.runelite.client.util.ImageUtil;
 
 /**
- * The side panel: title header, live session stats, pause/resume, the ACTUAL/VIRTUAL calc-mode
- * toggle, boss goals, loot grid, and end-session. Historical lookup is added in a later phase.
+ * The side panel: a Session tab (title header, live session stats, pause/resume, the
+ * ACTUAL/VIRTUAL calc-mode toggle, boss goals, loot grid, end-session) and a History tab
+ * (collapsible, deletable log of past sessions). Boss-name lookup for bosses outside the active
+ * session is added in a later phase.
  */
 public class BossTrackerPanel extends PluginPanel
 {
@@ -56,10 +65,13 @@ public class BossTrackerPanel extends PluginPanel
 	private static final Color ENDED_COLOR = new Color(187, 187, 187);
 
 	private static final int LOOT_GRID_COLUMNS = 5;
+	private static final DateTimeFormatter HISTORY_DATE_FORMAT = DateTimeFormatter.ofPattern("MMM d, HH:mm")
+		.withZone(ZoneId.systemDefault());
 
 	private final SessionManager sessionManager;
 	private final GoalManager goalManager;
 	private final LootTracker lootTracker;
+	private final SessionHistoryManager historyManager;
 	private final BossTrackerConfig config;
 	private final ItemManager itemManager;
 
@@ -92,32 +104,72 @@ public class BossTrackerPanel extends PluginPanel
 	private final JLabel lootTotalGpLabel = new JLabel(htmlLabel("Total GP: ", "N/A"));
 	private final JPanel lootGridPanel = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
 
+	private final JToggleButton sessionTabButton = new JToggleButton("Session");
+	private final JToggleButton historyTabButton = new JToggleButton("History");
+	private final CardLayout viewCardLayout = new CardLayout();
+	private final JPanel viewContainer = new JPanel(viewCardLayout);
+	private final JPanel sessionViewPanel = new JPanel();
+	private final JPanel historyViewPanel = new JPanel();
+	private int lastRenderedHistoryVersion = -1;
+
 	@Inject
 	public BossTrackerPanel(SessionManager sessionManager, GoalManager goalManager, LootTracker lootTracker,
-		BossTrackerConfig config, ItemManager itemManager)
+		SessionHistoryManager historyManager, BossTrackerConfig config, ItemManager itemManager)
 	{
 		this.sessionManager = sessionManager;
 		this.goalManager = goalManager;
 		this.lootTracker = lootTracker;
+		this.historyManager = historyManager;
 		this.config = config;
 		this.itemManager = itemManager;
 
 		setLayout(new BorderLayout());
 		setBorder(new EmptyBorder(10, 10, 10, 10));
 
+		sessionViewPanel.setLayout(new BoxLayout(sessionViewPanel, BoxLayout.Y_AXIS));
+		sessionViewPanel.add(buildBossInfoPanel());
+		sessionViewPanel.add(buildPauseAndResumeButtons());
+		sessionViewPanel.add(buildBossGoalsPanel());
+		sessionViewPanel.add(buildLootPanel());
+		sessionViewPanel.add(buildSessionEndButton());
+
+		historyViewPanel.setLayout(new BoxLayout(historyViewPanel, BoxLayout.Y_AXIS));
+
+		viewContainer.add(sessionViewPanel, "session");
+		viewContainer.add(historyViewPanel, "history");
+
 		JPanel sidePanel = new JPanel();
 		sidePanel.setLayout(new BoxLayout(sidePanel, BoxLayout.Y_AXIS));
 		sidePanel.add(buildTitlePanel());
 		sidePanel.add(Box.createRigidArea(new Dimension(0, 5)));
-		sidePanel.add(buildBossInfoPanel());
-		sidePanel.add(buildPauseAndResumeButtons());
-		sidePanel.add(buildBossGoalsPanel());
-		sidePanel.add(buildLootPanel());
-		sidePanel.add(buildSessionEndButton());
+		sidePanel.add(buildViewTabButtons());
+		sidePanel.add(viewContainer);
 
 		add(sidePanel, BorderLayout.NORTH);
 
 		refresh();
+	}
+
+	private JPanel buildViewTabButtons()
+	{
+		JPanel tabRow = new JPanel(new GridLayout(1, 2));
+		tabRow.setBorder(new EmptyBorder(0, 0, 4, 0));
+
+		ButtonGroup group = new ButtonGroup();
+		group.add(sessionTabButton);
+		group.add(historyTabButton);
+		sessionTabButton.setSelected(true);
+
+		sessionTabButton.addActionListener(e -> viewCardLayout.show(viewContainer, "session"));
+		historyTabButton.addActionListener(e ->
+		{
+			viewCardLayout.show(viewContainer, "history");
+			historyManager.reload();
+		});
+
+		tabRow.add(sessionTabButton);
+		tabRow.add(historyTabButton);
+		return tabRow;
 	}
 
 	private JPanel buildTitlePanel()
@@ -517,6 +569,7 @@ public class BossTrackerPanel extends PluginPanel
 			calcModeButton.setText("Actual");
 			refreshGoalsPanel(null);
 			refreshLootPanel(null);
+			refreshHistoryPanel();
 			return;
 		}
 
@@ -537,6 +590,97 @@ public class BossTrackerPanel extends PluginPanel
 
 		refreshGoalsPanel(display);
 		refreshLootPanel(display);
+		refreshHistoryPanel();
+	}
+
+	private void refreshHistoryPanel()
+	{
+		if (historyManager.getVersion() == lastRenderedHistoryVersion)
+		{
+			return;
+		}
+		lastRenderedHistoryVersion = historyManager.getVersion();
+
+		historyViewPanel.removeAll();
+		List<SessionHistoryEntry> entries = historyManager.getEntries();
+		if (entries.isEmpty())
+		{
+			JLabel emptyLabel = new JLabel("No session history yet.");
+			emptyLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
+			historyViewPanel.add(emptyLabel);
+		}
+		else
+		{
+			for (SessionHistoryEntry entry : entries)
+			{
+				historyViewPanel.add(buildHistoryEntryPanel(entry));
+			}
+		}
+
+		historyViewPanel.revalidate();
+		historyViewPanel.repaint();
+	}
+
+	private JPanel buildHistoryEntryPanel(SessionHistoryEntry entry)
+	{
+		JPanel entryPanel = new JPanel(new BorderLayout());
+		entryPanel.setBorder(new CompoundBorder(new EmptyBorder(0, 0, 4, 0), new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49))));
+		entryPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+
+		JPanel headerRow = new JPanel(new BorderLayout());
+		headerRow.setOpaque(false);
+
+		String dateLabel = HISTORY_DATE_FORMAT.format(Instant.ofEpochMilli(entry.getEndedAtEpochMilli()));
+		JToggleButton expandButton = new JToggleButton(entry.getBossName() + " - " + entry.getKillsThisSession() + " kills (" + dateLabel + ")");
+		expandButton.setHorizontalAlignment(SwingConstants.LEFT);
+
+		JButton deleteButton = new JButton("Delete");
+		deleteButton.addActionListener(e ->
+		{
+			historyManager.delete(entry);
+			refreshHistoryPanel();
+		});
+
+		headerRow.add(expandButton, BorderLayout.CENTER);
+		headerRow.add(deleteButton, BorderLayout.EAST);
+
+		JPanel detailPanel = new JPanel();
+		detailPanel.setLayout(new BoxLayout(detailPanel, BoxLayout.Y_AXIS));
+		detailPanel.setOpaque(false);
+		detailPanel.setBorder(new EmptyBorder(4, 8, 6, 8));
+		detailPanel.setVisible(false);
+
+		detailPanel.add(new JLabel(htmlLabel("KPH: ", TimeFormat.kph(entry.getKillsPerHour(), config.kphMethod()))));
+		detailPanel.add(new JLabel(htmlLabel("Session Time: ", TimeFormat.minutesSeconds(entry.getSessionDurationSeconds()))));
+		detailPanel.add(new JLabel(htmlLabel("Average Kill: ", TimeFormat.minutesSeconds(entry.getAverageKillTimeSeconds()))));
+		detailPanel.add(new JLabel(htmlLabel("Fastest Kill: ", TimeFormat.minutesSeconds(entry.getFastestKillSeconds()))));
+		detailPanel.add(new JLabel(htmlLabel("Idle Time: ", TimeFormat.minutesSeconds(entry.getIdleSeconds()))));
+
+		if (!entry.getLootItemQuantities().isEmpty())
+		{
+			JPanel lootGrid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
+			lootGrid.setOpaque(false);
+			for (Map.Entry<Integer, Integer> item : entry.getLootItemQuantities().entrySet())
+			{
+				JLabel itemLabel = new JLabel();
+				itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
+				itemLabel.setToolTipText(itemManager.getItemComposition(item.getKey()).getName() + " x" + item.getValue());
+				itemManager.getImage(item.getKey(), item.getValue(), item.getValue() > 1).addTo(itemLabel);
+
+				JPanel slot = new JPanel(new BorderLayout());
+				slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+				slot.setPreferredSize(new Dimension(32, 32));
+				slot.add(itemLabel, BorderLayout.CENTER);
+				lootGrid.add(slot);
+			}
+			detailPanel.add(lootGrid);
+		}
+
+		expandButton.addActionListener(e -> detailPanel.setVisible(expandButton.isSelected()));
+
+		entryPanel.add(headerRow, BorderLayout.NORTH);
+		entryPanel.add(detailPanel, BorderLayout.CENTER);
+		return entryPanel;
 	}
 
 	private static String htmlLabel(String key, String value)

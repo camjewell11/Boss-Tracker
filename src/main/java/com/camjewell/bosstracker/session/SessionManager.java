@@ -8,9 +8,12 @@ import com.camjewell.bosstracker.chat.ChatKillParser;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.BossStatsStore;
+import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
+import com.camjewell.bosstracker.persistence.SessionHistoryStore;
 import com.camjewell.bosstracker.util.TimeFormat;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.concurrent.Executor;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -47,6 +50,9 @@ public class SessionManager
 
 	@Inject
 	private LootTracker lootTracker;
+
+	@Inject
+	private SessionHistoryStore historyStore;
 
 	@Getter
 	private BossSession session;
@@ -160,6 +166,7 @@ public class SessionManager
 			{
 				maybeAnnounceOnChange(session);
 				persistSession(session);
+				persistHistory(session);
 			}
 			session = new BossSession(boss);
 			lootTracker.startNewSession(boss);
@@ -397,6 +404,7 @@ public class SessionManager
 		{
 			maybeAnnounceOnChange(session);
 			persistSession(session);
+			persistHistory(session);
 			lastCompletedSession = session;
 			session = null;
 			familyClock.clearAll();
@@ -496,5 +504,34 @@ public class SessionManager
 			stats.setTotalTimeActualSeconds(stats.getTotalTimeActualSeconds() + actualSeconds);
 			statsStore.save(accountHash, endedSession.getBoss(), stats);
 		});
+	}
+
+	/**
+	 * Records a history-log entry for a just-ended session (via {@link #end()} or a boss switch
+	 * in {@link #finalizeKill}). Both call sites invoke this while {@code this.session} still
+	 * refers to {@code endedSession}, so {@link #computeActualElapsedSeconds()} correctly
+	 * reflects its duration. Skips sessions with no kills to avoid empty log noise.
+	 */
+	private void persistHistory(BossSession endedSession)
+	{
+		if (asyncExecutor == null || endedSession == null || endedSession.getKillsThisSession() == 0)
+		{
+			return;
+		}
+
+		long accountHash = client.getAccountHash();
+
+		SessionHistoryEntry entry = new SessionHistoryEntry();
+		entry.setBossName(endedSession.getBoss().getBossName());
+		entry.setEndedAtEpochMilli(System.currentTimeMillis());
+		entry.setKillsThisSession(endedSession.getKillsThisSession());
+		entry.setSessionDurationSeconds(computeActualElapsedSeconds());
+		entry.setKillsPerHour(endedSession.getKillsPerHour());
+		entry.setAverageKillTimeSeconds(endedSession.getAverageKillTimeSeconds());
+		entry.setFastestKillSeconds(endedSession.getFastestKillSeconds());
+		entry.setIdleSeconds(endedSession.getIdleSeconds());
+		entry.setLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionLoot()));
+
+		asyncExecutor.execute(() -> historyStore.save(accountHash, entry));
 	}
 }

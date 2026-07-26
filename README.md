@@ -27,12 +27,17 @@ of dozens of scattered per-boss special cases.
 - **Loot tracking**: a per-boss loot grid (session or all-time, toggle via config) with item
   icons, quantities, Grand Exchange values, GP/kill, and GP/hour, plus a per-item "ignore" option
   to hide junk drops from the grid.
+- **Session history log**: every completed session (ended manually, via `!End`, by an inactivity
+  timeout, or by switching to a different boss) is saved to a collapsible, deletable log in its
+  own side panel tab — kills, KPH, average/fastest kill, idle time, session time, and a mini loot
+  grid per entry. History is stored as one JSON file per session under
+  `.runelite/boss-tracker/<accountHash>/history/`.
 - Automatic session pause on logout, auto-resume when combat-relevant chat activity is seen while
   paused, and an optional inactivity timeout to auto-end long-idle sessions.
 - Chat commands: `!Info`, `!End`, `!Pause`, `!Resume`.
 
-Historical lookup — browsing stats for bosses you aren't currently tracking — is planned but not
-yet implemented.
+Searching/browsing stats for a boss you aren't currently tracking is planned but not yet
+implemented.
 
 ## Configuration
 
