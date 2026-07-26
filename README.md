@@ -23,7 +23,9 @@ of dozens of scattered per-boss special cases.
 - **Boss goals**: set a kill-count target for the boss you're currently tracking from the side
   panel (right-click the goals section), watch progress via a progress bar, kills done/left, KPH,
   and time-to-goal — in the side panel and an optional overlay — and get a one-time chat
-  notification when the goal is reached.
+  notification when the goal is reached. Optionally also set a loot-value (GP) goal in the same
+  dialog for a one-time chat notification when that boss's all-time loot value crosses the
+  threshold.
 - **Loot tracking**: a per-boss loot grid (session or all-time, toggle via config) with item
   icons, quantities, Grand Exchange values, GP/kill, and GP/hour, plus a per-item "ignore" option
   to hide junk drops from the grid.

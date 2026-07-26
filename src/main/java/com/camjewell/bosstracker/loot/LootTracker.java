@@ -5,6 +5,7 @@ import com.camjewell.bosstracker.persistence.BossLoot;
 import com.camjewell.bosstracker.persistence.BossLootStore;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.BossStatsStore;
+import com.camjewell.bosstracker.session.GoalManager;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -17,6 +18,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Getter;
 import net.runelite.api.Client;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
 
 /**
@@ -33,6 +35,12 @@ public class LootTracker
 
 	@Inject
 	private BossStatsStore statsStore;
+
+	@Inject
+	private GoalManager goalManager;
+
+	@Inject
+	private ItemManager itemManager;
 
 	@Inject
 	private Client client;
@@ -135,7 +143,18 @@ public class LootTracker
 			lifetimeLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
 		}
 
+		goalManager.onLootValueChanged(sessionBoss, computeLifetimeGp());
 		persistLoot(sessionBoss, items);
+	}
+
+	private long computeLifetimeGp()
+	{
+		long total = 0;
+		for (Map.Entry<Integer, Integer> entry : lifetimeLoot.entrySet())
+		{
+			total += (long) itemManager.getItemPrice(entry.getKey()) * entry.getValue();
+		}
+		return total;
 	}
 
 	public void toggleIgnored(int itemId)

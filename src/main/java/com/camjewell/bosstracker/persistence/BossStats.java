@@ -26,6 +26,12 @@ public class BossStats
 	private boolean goalNotified;
 
 	/**
+	 * Optional loot-value goal in GP; 0 means no loot goal is set.
+	 */
+	private long lootGoalGp;
+	private boolean lootGoalNotified;
+
+	/**
 	 * Kills counted while loot tracking was active (Phase 3), used to compute GP/kill.
 	 */
 	private int lootKillsTracked;

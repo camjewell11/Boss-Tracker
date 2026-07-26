@@ -99,8 +99,10 @@ public class BossTrackerPanel extends PluginPanel
 	private final JLabel goalKillsDoneLabel = new JLabel(htmlLabel("Kills Done: ", "N/A"));
 	private final JLabel goalKillsLeftLabel = new JLabel(htmlLabel("Kills Left: ", "N/A"));
 	private final ProgressBar goalProgressBar = new ProgressBar();
+	private final JLabel goalLootLabel = new JLabel(htmlLabel("Loot Goal: ", "N/A"));
 	private final SpinnerNumberModel goalStartKcModel = new SpinnerNumberModel(0, 0, 10_000_000, 1);
 	private final SpinnerNumberModel goalEndKcModel = new SpinnerNumberModel(0, 0, 10_000_000, 5);
+	private final SpinnerNumberModel goalLootGpModel = new SpinnerNumberModel(0L, 0L, 2_000_000_000L, 100_000L);
 
 	private final JToggleButton lootCollapseButton = new JToggleButton("Loot ▾");
 	private final JToggleButton showIgnoredLootButton = new JToggleButton("Show Ignored");
@@ -361,13 +363,21 @@ public class BossTrackerPanel extends PluginPanel
 
 		JPanel progressBarPanel = new JPanel(new BorderLayout());
 		progressBarPanel.setOpaque(false);
-		progressBarPanel.setBorder(new EmptyBorder(5, 5, 7, 5));
+		progressBarPanel.setBorder(new EmptyBorder(5, 5, 0, 5));
 		progressBarPanel.add(goalProgressBar);
+
+		goalLootLabel.setBorder(new EmptyBorder(4, 5, 7, 5));
+
+		JPanel southPanel = new JPanel();
+		southPanel.setLayout(new BoxLayout(southPanel, BoxLayout.Y_AXIS));
+		southPanel.setOpaque(false);
+		southPanel.add(progressBarPanel);
+		southPanel.add(goalLootLabel);
 
 		goalsPanel.add(iconPanel, BorderLayout.WEST);
 		goalsPanel.add(kphTtgPanel, BorderLayout.CENTER);
 		goalsPanel.add(killsPanel, BorderLayout.EAST);
-		goalsPanel.add(progressBarPanel, BorderLayout.SOUTH);
+		goalsPanel.add(southPanel, BorderLayout.SOUTH);
 
 		return goalsPanel;
 	}
@@ -386,22 +396,27 @@ public class BossTrackerPanel extends PluginPanel
 		goalStartKcModel.setValue(liveKc);
 		goalEndKcModel.setMinimum(liveKc);
 		goalEndKcModel.setValue(Math.max(liveKc, goal.getEndKc()));
+		goalLootGpModel.setValue(goal.getLootGoalGp());
 
 		JSpinner startSpinner = new JSpinner(goalStartKcModel);
 		JSpinner endSpinner = new JSpinner(goalEndKcModel);
+		JSpinner lootGpSpinner = new JSpinner(goalLootGpModel);
 
 		JPanel inputPanel = new JPanel(new GridLayout(0, 2, 5, 5));
 		inputPanel.add(new JLabel("Start KC:"));
 		inputPanel.add(startSpinner);
 		inputPanel.add(new JLabel("End KC:"));
 		inputPanel.add(endSpinner);
+		inputPanel.add(new JLabel("Loot Goal (GP, 0 = off):"));
+		inputPanel.add(lootGpSpinner);
 
-		int option = JOptionPane.showConfirmDialog(null, inputPanel, "Set Boss KC Goal (" + goal.getBoss().getBossName() + ")",
+		int option = JOptionPane.showConfirmDialog(null, inputPanel, "Set Boss Goal (" + goal.getBoss().getBossName() + ")",
 			JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 
 		if (option == JOptionPane.OK_OPTION)
 		{
 			goalManager.setGoal((int) goalStartKcModel.getValue(), (int) goalEndKcModel.getValue());
+			goalManager.setLootGoal((long) goalLootGpModel.getValue());
 			refresh();
 		}
 	}
@@ -415,7 +430,10 @@ public class BossTrackerPanel extends PluginPanel
 		}
 
 		BossGoal goal = goalManager.getGoal();
-		boolean hasGoal = display != null && goal != null && goal.getBoss() == display.getBoss() && goal.isSet();
+		boolean goalForDisplayedBoss = display != null && goal != null && goal.getBoss() == display.getBoss();
+		boolean hasGoal = goalForDisplayedBoss && goal.isSet();
+
+		refreshLootGoalLabel(goalForDisplayedBoss ? goal : null);
 
 		if (!hasGoal)
 		{
@@ -467,6 +485,23 @@ public class BossTrackerPanel extends PluginPanel
 			goalProgressBar.setCenterLabel((int) percentDone + "%");
 			goalProgressBar.setValue((int) percentDone);
 		}
+	}
+
+	private void refreshLootGoalLabel(BossGoal goal)
+	{
+		if (goal == null || !goal.isLootGoalSet())
+		{
+			goalLootLabel.setText(htmlLabel("Loot Goal: ", "N/A"));
+			return;
+		}
+
+		long currentGp = 0;
+		for (Map.Entry<Integer, Integer> entry : lootTracker.getLifetimeLoot().entrySet())
+		{
+			currentGp += (long) itemManager.getItemPrice(entry.getKey()) * entry.getValue();
+		}
+
+		goalLootLabel.setText(htmlLabel("Loot Goal: ", formatGp(currentGp) + " / " + formatGp(goal.getLootGoalGp()) + " gp"));
 	}
 
 	private JPanel buildLootPanel()

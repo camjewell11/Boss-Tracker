@@ -309,7 +309,7 @@ public interface BossTrackerConfig extends Config
 		position = 3,
 		keyName = "notifyOnGoalComplete",
 		name = "Notify On Completion",
-		description = "Sends a chat message when a boss goal's kill count is reached",
+		description = "Sends a chat message when a boss goal's kill count or loot value threshold is reached",
 		section = goalsSection
 	)
 	default boolean notifyOnGoalComplete()

@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
@@ -42,6 +43,7 @@ import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.http.api.loottracker.LootRecordType;
 
+@Slf4j
 @PluginDescriptor(
 	name = "Boss Tracker",
 	description = "Tracks kills per hour, session stats, boss goals, loot and historical stats across OSRS bosses",
@@ -274,6 +276,8 @@ public class BossTrackerPlugin extends Plugin
 		{
 			return;
 		}
+
+		log.debug("LootReceived name='{}' type={} items={}", event.getName(), event.getType(), event.getItems());
 
 		BossSession session = sessionManager.getSession();
 		Boss trackedBoss = session != null ? session.getBoss() : null;

@@ -18,6 +18,14 @@ public class BossGoal
 	private int endKc;
 	private boolean notified;
 
+	/**
+	 * Optional loot-value goal in GP; 0 means no loot goal is set. {@code lootGoalNotified}
+	 * tracks whether the loot-goal-complete chat message has already been sent, so it only
+	 * fires once per goal.
+	 */
+	private long lootGoalGp;
+	private boolean lootGoalNotified;
+
 	public BossGoal(Boss boss)
 	{
 		this.boss = boss;
@@ -41,5 +49,15 @@ public class BossGoal
 	public boolean isComplete(int currentKc)
 	{
 		return isSet() && currentKc >= endKc;
+	}
+
+	public boolean isLootGoalSet()
+	{
+		return lootGoalGp > 0;
+	}
+
+	public boolean isLootGoalComplete(long currentGp)
+	{
+		return isLootGoalSet() && currentGp >= lootGoalGp;
 	}
 }

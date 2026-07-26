@@ -77,6 +77,8 @@ public class GoalManager
 			loaded.setStartKc(stats.getGoalStartKc());
 			loaded.setEndKc(stats.getGoalEndKc());
 			loaded.setNotified(stats.isGoalNotified());
+			loaded.setLootGoalGp(stats.getLootGoalGp());
+			loaded.setLootGoalNotified(stats.isLootGoalNotified());
 
 			if (trackedBoss == boss)
 			{
@@ -108,6 +110,20 @@ public class GoalManager
 		goal.setStartKc(0);
 		goal.setEndKc(0);
 		goal.setNotified(false);
+		goal.setLootGoalGp(0);
+		goal.setLootGoalNotified(false);
+		persistGoal(goal);
+	}
+
+	public void setLootGoal(long lootGoalGp)
+	{
+		if (goal == null)
+		{
+			return;
+		}
+
+		goal.setLootGoalGp(lootGoalGp);
+		goal.setLootGoalNotified(false);
 		persistGoal(goal);
 	}
 
@@ -135,6 +151,30 @@ public class GoalManager
 		}
 	}
 
+	/**
+	 * Called by {@link com.camjewell.bosstracker.loot.LootTracker} whenever this boss's all-time
+	 * loot value changes. Fires a one-time chat message when a loot-value goal is reached.
+	 */
+	public void onLootValueChanged(Boss boss, long currentLifetimeGp)
+	{
+		if (goal == null || goal.getBoss() != boss || goal.isLootGoalNotified() || !goal.isLootGoalComplete(currentLifetimeGp))
+		{
+			return;
+		}
+
+		goal.setLootGoalNotified(true);
+		persistGoal(goal);
+
+		if (config.notifyOnGoalComplete())
+		{
+			chatMessageManager.queue(QueuedMessage.builder()
+				.type(ChatMessageType.GAMEMESSAGE)
+				.runeLiteFormattedMessage("Loot goal reached: <col=00c000>" + boss.getBossName() + "</col> "
+					+ currentLifetimeGp + "/" + goal.getLootGoalGp() + " gp")
+				.build());
+		}
+	}
+
 	private void persistGoal(BossGoal g)
 	{
 		if (asyncExecutor == null)
@@ -147,6 +187,8 @@ public class GoalManager
 		int startKc = g.getStartKc();
 		int endKc = g.getEndKc();
 		boolean notified = g.isNotified();
+		long lootGoalGp = g.getLootGoalGp();
+		boolean lootGoalNotified = g.isLootGoalNotified();
 
 		asyncExecutor.execute(() ->
 		{
@@ -154,6 +196,8 @@ public class GoalManager
 			stats.setGoalStartKc(startKc);
 			stats.setGoalEndKc(endKc);
 			stats.setGoalNotified(notified);
+			stats.setLootGoalGp(lootGoalGp);
+			stats.setLootGoalNotified(lootGoalNotified);
 			statsStore.save(accountHash, boss, stats);
 		});
 	}
