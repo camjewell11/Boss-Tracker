@@ -11,6 +11,7 @@ public interface BossTrackerConfig extends Config
 	String DISPLAY_SECTION = "Display Options";
 	String GENERAL_SECTION = "General Settings";
 	String GOALS_SECTION = "Boss Goals";
+	String LOOT_SECTION = "Loot Display";
 
 	@ConfigSection(
 		name = "Display Options",
@@ -35,6 +36,14 @@ public interface BossTrackerConfig extends Config
 		closedByDefault = true
 	)
 	String goalsSection = GOALS_SECTION;
+
+	@ConfigSection(
+		name = "Loot Display",
+		description = "Loot tracking display settings",
+		position = 3,
+		closedByDefault = true
+	)
+	String lootSection = LOOT_SECTION;
 
 	// ---- Display Options ----
 
@@ -338,5 +347,25 @@ public interface BossTrackerConfig extends Config
 	default GoalOverlayRow bottomGoalOverlay()
 	{
 		return GoalOverlayRow.TTG;
+	}
+
+	// ---- Loot Display ----
+
+	enum LootDisplayMode
+	{
+		SESSION,
+		ALL_TIME
+	}
+
+	@ConfigItem(
+		position = 0,
+		keyName = "lootDisplayMode",
+		name = "Loot Display",
+		description = "Whether the loot grid shows this session's loot or all-time loot for the tracked boss",
+		section = lootSection
+	)
+	default LootDisplayMode lootDisplayMode()
+	{
+		return LootDisplayMode.SESSION;
 	}
 }

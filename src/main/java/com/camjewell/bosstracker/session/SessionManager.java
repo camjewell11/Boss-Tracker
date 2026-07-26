@@ -5,6 +5,7 @@ import com.camjewell.bosstracker.boss.Boss;
 import com.camjewell.bosstracker.boss.KillTiming;
 import com.camjewell.bosstracker.boss.TimingFamily;
 import com.camjewell.bosstracker.chat.ChatKillParser;
+import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.BossStatsStore;
 import com.camjewell.bosstracker.util.TimeFormat;
@@ -43,6 +44,9 @@ public class SessionManager
 
 	@Inject
 	private GoalManager goalManager;
+
+	@Inject
+	private LootTracker lootTracker;
 
 	@Getter
 	private BossSession session;
@@ -158,6 +162,7 @@ public class SessionManager
 				persistSession(session);
 			}
 			session = new BossSession(boss);
+			lootTracker.startNewSession(boss);
 		}
 
 		session.setKillsThisSession(session.getKillsThisSession() + 1);

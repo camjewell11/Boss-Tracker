@@ -1,6 +1,7 @@
 package com.camjewell.bosstracker;
 
 import com.camjewell.bosstracker.boss.Boss;
+import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.session.SessionManager;
@@ -31,11 +32,13 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
 import net.runelite.client.util.ImageUtil;
+import net.runelite.http.api.loottracker.LootRecordType;
 
 @PluginDescriptor(
 	name = "Boss Tracker",
@@ -82,6 +85,9 @@ public class BossTrackerPlugin extends Plugin
 	private GoalManager goalManager;
 
 	@Inject
+	private LootTracker lootTracker;
+
+	@Inject
 	private BossTrackerPanel panel;
 
 	@Inject
@@ -106,6 +112,7 @@ public class BossTrackerPlugin extends Plugin
 		executor = Executors.newSingleThreadScheduledExecutor();
 		sessionManager.setAsyncExecutor(executor);
 		goalManager.setAsyncExecutor(executor);
+		lootTracker.setAsyncExecutor(executor);
 
 		chatCommandManager.registerCommandAsync("!Info", this::infoCommand);
 		chatCommandManager.registerCommandAsync("!End", this::endCommand);
@@ -248,6 +255,20 @@ public class BossTrackerPlugin extends Plugin
 		{
 			sessionManager.onHitsplatApplied((NPC) event.getActor());
 		}
+	}
+
+	@Subscribe
+	public void onLootReceived(LootReceived event)
+	{
+		if (event.getType() != LootRecordType.NPC && event.getType() != LootRecordType.EVENT)
+		{
+			return;
+		}
+
+		BossSession session = sessionManager.getSession();
+		Boss trackedBoss = session != null ? session.getBoss() : null;
+		lootTracker.onLootReceived(trackedBoss, event.getName(), event.getItems());
+		SwingUtilities.invokeLater(panel::refresh);
 	}
 
 	@Subscribe
