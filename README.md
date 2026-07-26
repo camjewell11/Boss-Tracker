@@ -32,12 +32,13 @@ of dozens of scattered per-boss special cases.
   own side panel tab — kills, KPH, average/fastest kill, idle time, session time, and a mini loot
   grid per entry. History is stored as one JSON file per session under
   `.runelite/boss-tracker/<accountHash>/history/`.
+- **Boss search**: look up all-time stats and loot for any boss by name or alias (e.g. "cox",
+  "vetion", "General Graardor") from the side panel's Search tab, whether or not you're currently
+  tracking it — total KC, kills tracked, average KPH, fastest kill, total tracked time, GP/kill,
+  total GP, and a loot grid — with a "Delete Data" option to wipe a boss's saved stats and loot.
 - Automatic session pause on logout, auto-resume when combat-relevant chat activity is seen while
   paused, and an optional inactivity timeout to auto-end long-idle sessions.
 - Chat commands: `!Info`, `!End`, `!Pause`, `!Resume`.
-
-Searching/browsing stats for a boss you aren't currently tracking is planned but not yet
-implemented.
 
 ## Configuration
 

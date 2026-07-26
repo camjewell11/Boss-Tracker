@@ -2,6 +2,7 @@ package com.camjewell.bosstracker;
 
 import com.camjewell.bosstracker.boss.Boss;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
+import com.camjewell.bosstracker.lookup.BossLookupManager;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.GoalManager;
@@ -92,6 +93,9 @@ public class BossTrackerPlugin extends Plugin
 	private SessionHistoryManager historyManager;
 
 	@Inject
+	private BossLookupManager lookupManager;
+
+	@Inject
 	private BossTrackerPanel panel;
 
 	@Inject
@@ -118,6 +122,7 @@ public class BossTrackerPlugin extends Plugin
 		goalManager.setAsyncExecutor(executor);
 		lootTracker.setAsyncExecutor(executor);
 		historyManager.setAsyncExecutor(executor);
+		lookupManager.setAsyncExecutor(executor);
 
 		chatCommandManager.registerCommandAsync("!Info", this::infoCommand);
 		chatCommandManager.registerCommandAsync("!End", this::endCommand);

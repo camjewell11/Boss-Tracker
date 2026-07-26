@@ -65,6 +65,15 @@ public class BossStatsStore
 		}
 	}
 
+	public void delete(long accountHash, Boss boss)
+	{
+		File file = statsFile(accountHash, boss);
+		if (file.exists() && !file.delete())
+		{
+			log.warn("Failed to delete boss stats file for {}", boss.getBossName());
+		}
+	}
+
 	private File statsFile(long accountHash, Boss boss)
 	{
 		File accountDir = new File(new File(RuneLite.RUNELITE_DIR, "boss-tracker"), String.valueOf(accountHash));

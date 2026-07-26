@@ -2,8 +2,11 @@ package com.camjewell.bosstracker.ui;
 
 import com.camjewell.bosstracker.BossTrackerConfig;
 import com.camjewell.bosstracker.boss.Boss;
+import com.camjewell.bosstracker.boss.Boss;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
+import com.camjewell.bosstracker.lookup.BossLookupManager;
 import com.camjewell.bosstracker.loot.LootTracker;
+import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
 import com.camjewell.bosstracker.session.BossGoal;
 import com.camjewell.bosstracker.session.BossSession;
@@ -35,6 +38,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JSpinner;
+import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
@@ -72,6 +76,7 @@ public class BossTrackerPanel extends PluginPanel
 	private final GoalManager goalManager;
 	private final LootTracker lootTracker;
 	private final SessionHistoryManager historyManager;
+	private final BossLookupManager lookupManager;
 	private final BossTrackerConfig config;
 	private final ItemManager itemManager;
 
@@ -106,20 +111,29 @@ public class BossTrackerPanel extends PluginPanel
 
 	private final JToggleButton sessionTabButton = new JToggleButton("Session");
 	private final JToggleButton historyTabButton = new JToggleButton("History");
+	private final JToggleButton searchTabButton = new JToggleButton("Search");
 	private final CardLayout viewCardLayout = new CardLayout();
 	private final JPanel viewContainer = new JPanel(viewCardLayout);
 	private final JPanel sessionViewPanel = new JPanel();
 	private final JPanel historyViewPanel = new JPanel();
+	private final JPanel searchViewPanel = new JPanel();
 	private int lastRenderedHistoryVersion = -1;
+	private int lastRenderedLookupVersion = -1;
+
+	private final JTextField searchField = new JTextField();
+	private final JLabel searchResultLabel = new JLabel();
+	private final JPanel searchResultPanel = new JPanel();
 
 	@Inject
 	public BossTrackerPanel(SessionManager sessionManager, GoalManager goalManager, LootTracker lootTracker,
-		SessionHistoryManager historyManager, BossTrackerConfig config, ItemManager itemManager)
+		SessionHistoryManager historyManager, BossLookupManager lookupManager, BossTrackerConfig config,
+		ItemManager itemManager)
 	{
 		this.sessionManager = sessionManager;
 		this.goalManager = goalManager;
 		this.lootTracker = lootTracker;
 		this.historyManager = historyManager;
+		this.lookupManager = lookupManager;
 		this.config = config;
 		this.itemManager = itemManager;
 
@@ -135,8 +149,15 @@ public class BossTrackerPanel extends PluginPanel
 
 		historyViewPanel.setLayout(new BoxLayout(historyViewPanel, BoxLayout.Y_AXIS));
 
+		searchViewPanel.setLayout(new BoxLayout(searchViewPanel, BoxLayout.Y_AXIS));
+		searchViewPanel.add(buildSearchBar());
+		searchViewPanel.add(searchResultLabel);
+		searchResultPanel.setLayout(new BoxLayout(searchResultPanel, BoxLayout.Y_AXIS));
+		searchViewPanel.add(searchResultPanel);
+
 		viewContainer.add(sessionViewPanel, "session");
 		viewContainer.add(historyViewPanel, "history");
+		viewContainer.add(searchViewPanel, "search");
 
 		JPanel sidePanel = new JPanel();
 		sidePanel.setLayout(new BoxLayout(sidePanel, BoxLayout.Y_AXIS));
@@ -152,12 +173,13 @@ public class BossTrackerPanel extends PluginPanel
 
 	private JPanel buildViewTabButtons()
 	{
-		JPanel tabRow = new JPanel(new GridLayout(1, 2));
+		JPanel tabRow = new JPanel(new GridLayout(1, 3));
 		tabRow.setBorder(new EmptyBorder(0, 0, 4, 0));
 
 		ButtonGroup group = new ButtonGroup();
 		group.add(sessionTabButton);
 		group.add(historyTabButton);
+		group.add(searchTabButton);
 		sessionTabButton.setSelected(true);
 
 		sessionTabButton.addActionListener(e -> viewCardLayout.show(viewContainer, "session"));
@@ -166,10 +188,64 @@ public class BossTrackerPanel extends PluginPanel
 			viewCardLayout.show(viewContainer, "history");
 			historyManager.reload();
 		});
+		searchTabButton.addActionListener(e -> viewCardLayout.show(viewContainer, "search"));
 
 		tabRow.add(sessionTabButton);
 		tabRow.add(historyTabButton);
+		tabRow.add(searchTabButton);
 		return tabRow;
+	}
+
+	private JPanel buildSearchBar()
+	{
+		JPanel container = new JPanel(new BorderLayout(4, 0));
+		container.setBorder(new EmptyBorder(0, 0, 8, 0));
+
+		searchField.setToolTipText("Boss name or alias, e.g. \"cox\", \"vetion\", \"General Graardor\"");
+		JButton searchButton = new JButton("Search");
+
+		Runnable runSearch = this::performSearch;
+		searchButton.addActionListener(e -> runSearch.run());
+		searchField.addActionListener(e -> runSearch.run());
+
+		container.add(searchField, BorderLayout.CENTER);
+		container.add(searchButton, BorderLayout.EAST);
+		return container;
+	}
+
+	private void performSearch()
+	{
+		String query = searchField.getText().trim();
+		if (query.isEmpty())
+		{
+			return;
+		}
+
+		Boss match = Boss.byNameOrAlias(query);
+		if (match == null)
+		{
+			String lowerQuery = query.toLowerCase();
+			for (Boss candidate : Boss.values())
+			{
+				if (candidate.getBossName().toLowerCase().contains(lowerQuery))
+				{
+					match = candidate;
+					break;
+				}
+			}
+		}
+
+		if (match == null)
+		{
+			lookupManager.clear();
+			searchResultLabel.setText("No boss found matching \"" + query + "\".");
+			refreshSearchPanel();
+			return;
+		}
+
+		searchResultLabel.setText("");
+		lookupManager.lookup(match);
+		refreshSearchPanel();
 	}
 
 	private JPanel buildTitlePanel()
@@ -570,6 +646,7 @@ public class BossTrackerPanel extends PluginPanel
 			refreshGoalsPanel(null);
 			refreshLootPanel(null);
 			refreshHistoryPanel();
+			refreshSearchPanel();
 			return;
 		}
 
@@ -591,6 +668,118 @@ public class BossTrackerPanel extends PluginPanel
 		refreshGoalsPanel(display);
 		refreshLootPanel(display);
 		refreshHistoryPanel();
+		refreshSearchPanel();
+	}
+
+	private void refreshSearchPanel()
+	{
+		if (lookupManager.getVersion() == lastRenderedLookupVersion)
+		{
+			return;
+		}
+		lastRenderedLookupVersion = lookupManager.getVersion();
+
+		searchResultPanel.removeAll();
+		Boss boss = lookupManager.getBoss();
+		if (boss != null)
+		{
+			searchResultPanel.add(buildLookupResultPanel(boss));
+		}
+
+		searchResultPanel.revalidate();
+		searchResultPanel.repaint();
+	}
+
+	private JPanel buildLookupResultPanel(Boss boss)
+	{
+		BossStats stats = lookupManager.getStats();
+		Map<Integer, Integer> lootMap = lookupManager.getLootItemQuantities();
+
+		JPanel resultPanel = new JPanel(new BorderLayout());
+		resultPanel.setBorder(new CompoundBorder(new EmptyBorder(0, 0, 4, 0), new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49))));
+		resultPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+
+		JPanel headerRow = new JPanel(new BorderLayout());
+		headerRow.setOpaque(false);
+		headerRow.setBorder(new EmptyBorder(4, 6, 4, 6));
+
+		JLabel nameLabel = new JLabel(boss.getBossName());
+		nameLabel.setFont(FontManager.getRunescapeBoldFont());
+		JLabel iconLabel = new JLabel();
+		itemManager.getImage(boss.getIconItemId()).addTo(iconLabel);
+
+		JButton deleteButton = new JButton("Delete Data");
+		deleteButton.addActionListener(e ->
+		{
+			int confirm = JOptionPane.showConfirmDialog(this,
+				"Delete all saved stats and loot for " + boss.getBossName() + "? This cannot be undone.",
+				"Delete Boss Data", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+			if (confirm == JOptionPane.YES_OPTION)
+			{
+				lookupManager.deleteData(boss);
+				refreshSearchPanel();
+			}
+		});
+
+		headerRow.add(iconLabel, BorderLayout.WEST);
+		headerRow.add(nameLabel, BorderLayout.CENTER);
+		headerRow.add(deleteButton, BorderLayout.EAST);
+
+		JPanel detailPanel = new JPanel();
+		detailPanel.setLayout(new BoxLayout(detailPanel, BoxLayout.Y_AXIS));
+		detailPanel.setOpaque(false);
+		detailPanel.setBorder(new EmptyBorder(0, 8, 6, 8));
+
+		if (stats.getKillsTracked() == 0)
+		{
+			detailPanel.add(new JLabel("No data recorded for this boss yet."));
+		}
+		else
+		{
+			int fastestKill = stats.getFastestKillSeconds() == Integer.MAX_VALUE ? 0 : stats.getFastestKillSeconds();
+			double avgKillSeconds = (double) stats.getTotalTimeActualSeconds() / stats.getKillsTracked();
+			double kph = avgKillSeconds > 0 ? 3600.0 / avgKillSeconds : 0;
+
+			detailPanel.add(new JLabel(htmlLabel("Total KC: ", String.valueOf(stats.getTotalKc()))));
+			detailPanel.add(new JLabel(htmlLabel("Kills Tracked: ", String.valueOf(stats.getKillsTracked()))));
+			detailPanel.add(new JLabel(htmlLabel("Average KPH: ", TimeFormat.kph(kph, config.kphMethod()))));
+			detailPanel.add(new JLabel(htmlLabel("Fastest Kill: ", TimeFormat.minutesSeconds(fastestKill))));
+			detailPanel.add(new JLabel(htmlLabel("Total Tracked Time: ", TimeFormat.minutesSeconds((int) stats.getTotalTimeActualSeconds()))));
+		}
+
+		if (!lootMap.isEmpty())
+		{
+			double totalGp = 0;
+			for (Map.Entry<Integer, Integer> entry : lootMap.entrySet())
+			{
+				totalGp += (double) itemManager.getItemPrice(entry.getKey()) * entry.getValue();
+			}
+
+			int lootKills = Math.max(stats.getLootKillsTracked(), 1);
+			detailPanel.add(new JLabel(htmlLabel("GP/Kill: ", formatGp(totalGp / lootKills))));
+			detailPanel.add(new JLabel(htmlLabel("Total GP: ", formatGp(totalGp))));
+
+			JPanel lootGrid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
+			lootGrid.setOpaque(false);
+			for (Map.Entry<Integer, Integer> item : lootMap.entrySet())
+			{
+				JLabel itemLabel = new JLabel();
+				itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
+				itemLabel.setToolTipText(itemManager.getItemComposition(item.getKey()).getName() + " x" + item.getValue());
+				itemManager.getImage(item.getKey(), item.getValue(), item.getValue() > 1).addTo(itemLabel);
+
+				JPanel slot = new JPanel(new BorderLayout());
+				slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+				slot.setPreferredSize(new Dimension(32, 32));
+				slot.add(itemLabel, BorderLayout.CENTER);
+				lootGrid.add(slot);
+			}
+			detailPanel.add(lootGrid);
+		}
+
+		resultPanel.add(headerRow, BorderLayout.NORTH);
+		resultPanel.add(detailPanel, BorderLayout.CENTER);
+		return resultPanel;
 	}
 
 	private void refreshHistoryPanel()
