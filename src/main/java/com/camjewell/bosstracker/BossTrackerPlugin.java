@@ -2,7 +2,9 @@ package com.camjewell.bosstracker;
 
 import com.camjewell.bosstracker.boss.Boss;
 import com.camjewell.bosstracker.session.BossSession;
+import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.session.SessionManager;
+import com.camjewell.bosstracker.ui.BossGoalOverlay;
 import com.camjewell.bosstracker.ui.BossTrackerPanel;
 import com.camjewell.bosstracker.ui.SessionInfobox;
 import com.camjewell.bosstracker.ui.SessionOverlay;
@@ -77,7 +79,13 @@ public class BossTrackerPlugin extends Plugin
 	private SessionManager sessionManager;
 
 	@Inject
+	private GoalManager goalManager;
+
+	@Inject
 	private BossTrackerPanel panel;
+
+	@Inject
+	private BossGoalOverlay goalOverlay;
 
 	private ScheduledExecutorService executor;
 	private NavigationButton navButton;
@@ -97,6 +105,7 @@ public class BossTrackerPlugin extends Plugin
 	{
 		executor = Executors.newSingleThreadScheduledExecutor();
 		sessionManager.setAsyncExecutor(executor);
+		goalManager.setAsyncExecutor(executor);
 
 		chatCommandManager.registerCommandAsync("!Info", this::infoCommand);
 		chatCommandManager.registerCommandAsync("!End", this::endCommand);
@@ -116,6 +125,7 @@ public class BossTrackerPlugin extends Plugin
 		}
 
 		overlayManager.add(overlay);
+		overlayManager.add(goalOverlay);
 	}
 
 	@Override
@@ -129,6 +139,7 @@ public class BossTrackerPlugin extends Plugin
 		clientToolbar.removeNavigation(navButton);
 		infoBoxManager.removeInfoBox(infobox);
 		overlayManager.remove(overlay);
+		overlayManager.remove(goalOverlay);
 
 		executor.shutdownNow();
 	}

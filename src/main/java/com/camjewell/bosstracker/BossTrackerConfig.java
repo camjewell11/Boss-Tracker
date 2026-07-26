@@ -10,6 +10,7 @@ public interface BossTrackerConfig extends Config
 {
 	String DISPLAY_SECTION = "Display Options";
 	String GENERAL_SECTION = "General Settings";
+	String GOALS_SECTION = "Boss Goals";
 
 	@ConfigSection(
 		name = "Display Options",
@@ -26,6 +27,14 @@ public interface BossTrackerConfig extends Config
 		closedByDefault = false
 	)
 	String generalSection = GENERAL_SECTION;
+
+	@ConfigSection(
+		name = "Boss Goals",
+		description = "Boss goal panel/overlay settings",
+		position = 2,
+		closedByDefault = true
+	)
+	String goalsSection = GOALS_SECTION;
 
 	// ---- Display Options ----
 
@@ -247,5 +256,87 @@ public interface BossTrackerConfig extends Config
 	default DksSelector dksSelector()
 	{
 		return DksSelector.KINGS;
+	}
+
+	// ---- Boss Goals ----
+
+	@ConfigItem(
+		position = 0,
+		keyName = "displayBossGoalsPanel",
+		name = "Goals Panel",
+		description = "Shows the boss goal section in the side panel",
+		section = goalsSection
+	)
+	default boolean displayBossGoalsPanel()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		position = 1,
+		keyName = "displayBossGoalsOverlay",
+		name = "Goals Overlay",
+		description = "Shows a boss goal progress overlay",
+		section = goalsSection
+	)
+	default boolean displayBossGoalsOverlay()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		position = 2,
+		keyName = "displayRelativeKills",
+		name = "Relative Kills",
+		description = "Displays goal progress relative to the start KC (0 to kills needed) instead of the raw KC range",
+		section = goalsSection
+	)
+	default boolean displayRelativeKills()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		position = 3,
+		keyName = "notifyOnGoalComplete",
+		name = "Notify On Completion",
+		description = "Sends a chat message when a boss goal's kill count is reached",
+		section = goalsSection
+	)
+	default boolean notifyOnGoalComplete()
+	{
+		return true;
+	}
+
+	enum GoalOverlayRow
+	{
+		KILLS_DONE,
+		KILLS_LEFT,
+		KPH,
+		TTG
+	}
+
+	@ConfigItem(
+		position = 4,
+		keyName = "topGoalOverlay",
+		name = "Overlay Top Row",
+		description = "What the top row of the goal overlay shows",
+		section = goalsSection
+	)
+	default GoalOverlayRow topGoalOverlay()
+	{
+		return GoalOverlayRow.KPH;
+	}
+
+	@ConfigItem(
+		position = 5,
+		keyName = "bottomGoalOverlay",
+		name = "Overlay Bottom Row",
+		description = "What the bottom row of the goal overlay shows",
+		section = goalsSection
+	)
+	default GoalOverlayRow bottomGoalOverlay()
+	{
+		return GoalOverlayRow.TTG;
 	}
 }

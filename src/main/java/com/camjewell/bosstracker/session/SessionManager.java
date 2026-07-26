@@ -41,6 +41,9 @@ public class SessionManager
 	@Inject
 	private BossStatsStore statsStore;
 
+	@Inject
+	private GoalManager goalManager;
+
 	@Getter
 	private BossSession session;
 
@@ -159,6 +162,9 @@ public class SessionManager
 
 		session.setKillsThisSession(session.getKillsThisSession() + 1);
 		session.setKillCount(killCount);
+
+		goalManager.ensureLoaded(boss);
+		goalManager.onKillCounted(boss, killCount);
 
 		boolean isFirstKillOfSession = session.getKillsThisSession() == 1;
 		if (isFirstKillOfSession)

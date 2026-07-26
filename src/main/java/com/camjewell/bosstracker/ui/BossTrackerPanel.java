@@ -1,8 +1,10 @@
 package com.camjewell.bosstracker.ui;
 
 import com.camjewell.bosstracker.BossTrackerConfig;
+import com.camjewell.bosstracker.session.BossGoal;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.CalcMode;
+import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.session.SessionManager;
 import com.camjewell.bosstracker.util.TimeFormat;
 import java.awt.BorderLayout;
@@ -14,7 +16,12 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JSpinner;
+import javax.swing.SpinnerNumberModel;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
@@ -23,6 +30,7 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.PluginErrorPanel;
+import net.runelite.client.ui.components.ProgressBar;
 import net.runelite.client.util.ColorUtil;
 
 /**
@@ -38,6 +46,7 @@ public class BossTrackerPanel extends PluginPanel
 	private static final Color ENDED_COLOR = new Color(187, 187, 187);
 
 	private final SessionManager sessionManager;
+	private final GoalManager goalManager;
 	private final BossTrackerConfig config;
 	private final ItemManager itemManager;
 
@@ -53,10 +62,22 @@ public class BossTrackerPanel extends PluginPanel
 	private final JButton pauseResumeButton = new JButton("Pause");
 	private final JButton calcModeButton = new JButton("Actual");
 
+	private final JPanel goalsPanel = new JPanel(new BorderLayout());
+	private final JLabel goalIconLabel = new JLabel();
+	private final JLabel goalKphLabel = new JLabel(htmlLabel("KPH: ", "N/A"));
+	private final JLabel goalTtgLabel = new JLabel(htmlLabel("TTG: ", "N/A"));
+	private final JLabel goalKillsDoneLabel = new JLabel(htmlLabel("Kills Done: ", "N/A"));
+	private final JLabel goalKillsLeftLabel = new JLabel(htmlLabel("Kills Left: ", "N/A"));
+	private final ProgressBar goalProgressBar = new ProgressBar();
+	private final SpinnerNumberModel goalStartKcModel = new SpinnerNumberModel(0, 0, 10_000_000, 1);
+	private final SpinnerNumberModel goalEndKcModel = new SpinnerNumberModel(0, 0, 10_000_000, 5);
+
 	@Inject
-	public BossTrackerPanel(SessionManager sessionManager, BossTrackerConfig config, ItemManager itemManager)
+	public BossTrackerPanel(SessionManager sessionManager, GoalManager goalManager, BossTrackerConfig config,
+		ItemManager itemManager)
 	{
 		this.sessionManager = sessionManager;
+		this.goalManager = goalManager;
 		this.config = config;
 		this.itemManager = itemManager;
 
@@ -69,6 +90,7 @@ public class BossTrackerPanel extends PluginPanel
 		sidePanel.add(Box.createRigidArea(new Dimension(0, 5)));
 		sidePanel.add(buildBossInfoPanel());
 		sidePanel.add(buildPauseAndResumeButtons());
+		sidePanel.add(buildBossGoalsPanel());
 		sidePanel.add(buildSessionEndButton());
 
 		add(sidePanel, BorderLayout.NORTH);
@@ -149,6 +171,154 @@ public class BossTrackerPanel extends PluginPanel
 		return container;
 	}
 
+	private JPanel buildBossGoalsPanel()
+	{
+		goalsPanel.setBorder(new CompoundBorder(new EmptyBorder(0, 0, 5, 0), new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49))));
+		goalsPanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+
+		JPopupMenu popupMenu = new JPopupMenu();
+		JMenuItem setGoalItem = new JMenuItem("Set Boss Goal");
+		setGoalItem.addActionListener(e -> openSetGoalDialog());
+		JMenuItem resetGoalItem = new JMenuItem("Reset Boss Goal");
+		resetGoalItem.addActionListener(e ->
+		{
+			goalManager.resetGoal();
+			refresh();
+		});
+		popupMenu.add(setGoalItem);
+		popupMenu.add(resetGoalItem);
+		goalsPanel.setComponentPopupMenu(popupMenu);
+
+		JPanel iconPanel = new JPanel();
+		iconPanel.setOpaque(false);
+		iconPanel.add(goalIconLabel);
+
+		JPanel kphTtgPanel = new JPanel(new GridLayout(2, 1));
+		kphTtgPanel.setOpaque(false);
+		kphTtgPanel.setBorder(new EmptyBorder(5, 3, 0, 3));
+		kphTtgPanel.add(goalKphLabel);
+		kphTtgPanel.add(goalTtgLabel);
+
+		JPanel killsPanel = new JPanel(new GridLayout(2, 1));
+		killsPanel.setOpaque(false);
+		killsPanel.setBorder(new EmptyBorder(5, 0, 0, 17));
+		killsPanel.add(goalKillsDoneLabel);
+		killsPanel.add(goalKillsLeftLabel);
+
+		goalProgressBar.setBackground(new Color(61, 56, 49));
+		goalProgressBar.setForeground(new Color(91, 154, 47));
+		goalProgressBar.setMaximumValue(100);
+
+		JPanel progressBarPanel = new JPanel(new BorderLayout());
+		progressBarPanel.setOpaque(false);
+		progressBarPanel.setBorder(new EmptyBorder(5, 5, 7, 5));
+		progressBarPanel.add(goalProgressBar);
+
+		goalsPanel.add(iconPanel, BorderLayout.WEST);
+		goalsPanel.add(kphTtgPanel, BorderLayout.CENTER);
+		goalsPanel.add(killsPanel, BorderLayout.EAST);
+		goalsPanel.add(progressBarPanel, BorderLayout.SOUTH);
+
+		return goalsPanel;
+	}
+
+	private void openSetGoalDialog()
+	{
+		BossGoal goal = goalManager.getGoal();
+		if (goal == null)
+		{
+			return;
+		}
+
+		BossSession current = sessionManager.getSession();
+		int liveKc = current != null ? current.getKillCount() : goal.getStartKc();
+
+		goalStartKcModel.setValue(liveKc);
+		goalEndKcModel.setMinimum(liveKc);
+		goalEndKcModel.setValue(Math.max(liveKc, goal.getEndKc()));
+
+		JSpinner startSpinner = new JSpinner(goalStartKcModel);
+		JSpinner endSpinner = new JSpinner(goalEndKcModel);
+
+		JPanel inputPanel = new JPanel(new GridLayout(0, 2, 5, 5));
+		inputPanel.add(new JLabel("Start KC:"));
+		inputPanel.add(startSpinner);
+		inputPanel.add(new JLabel("End KC:"));
+		inputPanel.add(endSpinner);
+
+		int option = JOptionPane.showConfirmDialog(null, inputPanel, "Set Boss KC Goal (" + goal.getBoss().getBossName() + ")",
+			JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+		if (option == JOptionPane.OK_OPTION)
+		{
+			goalManager.setGoal((int) goalStartKcModel.getValue(), (int) goalEndKcModel.getValue());
+			refresh();
+		}
+	}
+
+	private void refreshGoalsPanel(BossSession display)
+	{
+		goalsPanel.setVisible(config.displayBossGoalsPanel());
+		if (!config.displayBossGoalsPanel())
+		{
+			return;
+		}
+
+		BossGoal goal = goalManager.getGoal();
+		boolean hasGoal = display != null && goal != null && goal.getBoss() == display.getBoss() && goal.isSet();
+
+		if (!hasGoal)
+		{
+			goalIconLabel.setIcon(null);
+			goalKphLabel.setText(htmlLabel("KPH: ", "N/A"));
+			goalTtgLabel.setText(htmlLabel("TTG: ", "N/A"));
+			goalKillsDoneLabel.setText(htmlLabel("Kills Done: ", "N/A"));
+			goalKillsLeftLabel.setText(htmlLabel("Kills Left: ", "N/A"));
+			goalProgressBar.setLeftLabel("");
+			goalProgressBar.setRightLabel("");
+			goalProgressBar.setCenterLabel("Set a goal");
+			goalProgressBar.setValue(0);
+			return;
+		}
+
+		itemManager.getImage(display.getBoss().getIconItemId()).addTo(goalIconLabel);
+
+		int currentKc = display.getKillCount();
+		int killsDone = goal.killsDone(currentKc);
+		int totalToGet = goal.totalKillsToGet();
+		int killsLeft = Math.max(0, totalToGet - killsDone);
+		boolean complete = goal.isComplete(currentKc);
+		double percentDone = totalToGet > 0 ? 100.0 * killsDone / totalToGet : 0;
+		double ttgHours = display.getKillsPerHour() > 0 ? killsLeft / display.getKillsPerHour() : 0;
+
+		goalKphLabel.setText(htmlLabel("KPH: ", TimeFormat.kph(display.getKillsPerHour(), config.kphMethod())));
+		goalTtgLabel.setText(htmlLabel("TTG: ", complete ? "00:00:00" : TimeFormat.minutesSeconds((int) (ttgHours * 3600))));
+		goalKillsDoneLabel.setText(htmlLabel("Kills Done: ", String.valueOf(complete ? totalToGet : killsDone)));
+		goalKillsLeftLabel.setText(htmlLabel("Kills Left: ", String.valueOf(complete ? 0 : killsLeft)));
+
+		if (config.displayRelativeKills())
+		{
+			goalProgressBar.setLeftLabel("0");
+			goalProgressBar.setRightLabel(String.valueOf(totalToGet));
+		}
+		else
+		{
+			goalProgressBar.setLeftLabel(String.valueOf(goal.getStartKc()));
+			goalProgressBar.setRightLabel(String.valueOf(goal.getEndKc()));
+		}
+
+		if (complete)
+		{
+			goalProgressBar.setCenterLabel("Completed");
+			goalProgressBar.setValue(100);
+		}
+		else
+		{
+			goalProgressBar.setCenterLabel((int) percentDone + "%");
+			goalProgressBar.setValue((int) percentDone);
+		}
+	}
+
 	private JPanel buildSessionEndButton()
 	{
 		JPanel container = new JPanel(new BorderLayout());
@@ -191,6 +361,7 @@ public class BossTrackerPanel extends PluginPanel
 			sessionTimeLabel.setText(htmlLabel("Session Time: ", "N/A"));
 			pauseResumeButton.setText("Pause");
 			calcModeButton.setText("Actual");
+			refreshGoalsPanel(null);
 			return;
 		}
 
@@ -208,6 +379,8 @@ public class BossTrackerPanel extends PluginPanel
 
 		pauseResumeButton.setText(session != null && session.isPaused() ? "Resume" : "Pause");
 		calcModeButton.setText(display.getCalcMode() == CalcMode.VIRTUAL ? "Virtual" : "Actual");
+
+		refreshGoalsPanel(display);
 	}
 
 	private static String htmlLabel(String key, String value)
