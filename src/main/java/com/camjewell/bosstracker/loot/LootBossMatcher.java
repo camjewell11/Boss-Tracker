@@ -20,6 +20,14 @@ import java.util.Map;
  * which meant Corrupted Gauntlet loot could never match (its reward chest reports a distinct
  * event name). {@link Boss#CORRUPTED_GAUNTLET} is mapped to "The Corrupted Gauntlet" here
  * instead; verify this string in-game since it can't be confirmed without a live client.
+ *
+ * <p>{@link Boss#COLOSSEUM}'s alias ("Fortis Colosseum") and the assumption that
+ * {@link Boss#ARAXXOR}/{@link Boss#MAGGOT_KING}/{@link Boss#BARROWS} need no alias at all were
+ * confirmed by decompiling RuneLite's own {@code loottracker} plugin class and reading its
+ * literal event-name table directly ("Barrows", "Maggot King", "Fortis Colosseum", etc. all
+ * appear there verbatim) rather than guessed — the same class of bug as the Corrupted Gauntlet
+ * fix above, since a boss enum's own display name matching its NPC name doesn't guarantee it
+ * matches its loot *event* name for chest/corpse-interaction encounters.
  */
 public final class LootBossMatcher
 {
@@ -38,6 +46,7 @@ public final class LootBossMatcher
 		LOOT_ALIASES.put(Boss.NIGHTMARE, Collections.singletonList("The Nightmare"));
 		LOOT_ALIASES.put(Boss.PHOSANIS_NIGHTMARE, Collections.singletonList("The Nightmare"));
 		LOOT_ALIASES.put(Boss.ROYAL_TITANS, Arrays.asList("Branda the Fire Queen", "Eldric the Ice King"));
+		LOOT_ALIASES.put(Boss.COLOSSEUM, Collections.singletonList("Fortis Colosseum"));
 	}
 
 	private LootBossMatcher()
