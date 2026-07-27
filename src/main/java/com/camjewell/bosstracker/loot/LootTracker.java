@@ -6,6 +6,7 @@ import com.camjewell.bosstracker.persistence.BossLootStore;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.BossStatsStore;
 import com.camjewell.bosstracker.session.GoalManager;
+import com.camjewell.bosstracker.util.ItemPriceCache;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -18,7 +19,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Getter;
 import net.runelite.api.Client;
-import net.runelite.client.game.ItemManager;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.ItemStack;
 
 /**
@@ -40,10 +41,13 @@ public class LootTracker
 	private GoalManager goalManager;
 
 	@Inject
-	private ItemManager itemManager;
+	private Client client;
 
 	@Inject
-	private Client client;
+	private ClientThread clientThread;
+
+	@Inject
+	private ItemPriceCache priceCache;
 
 	@Getter
 	private final Map<Integer, Integer> sessionLoot = new LinkedHashMap<>();
@@ -59,6 +63,13 @@ public class LootTracker
 
 	@Getter
 	private long lifetimeTimeActualSeconds;
+
+	/**
+	 * Bumped whenever session/lifetime loot or the ignore list changes, so the panel can skip
+	 * rebuilding the loot grid (and re-registering item image listeners) on every tick.
+	 */
+	@Getter
+	private int version;
 
 	private Boss trackedBoss;
 	private Executor asyncExecutor;
@@ -100,6 +111,7 @@ public class LootTracker
 		ignoredItemIds.clear();
 		lifetimeKillsTracked = 0;
 		lifetimeTimeActualSeconds = 0;
+		version++;
 
 		if (asyncExecutor == null)
 		{
@@ -118,6 +130,20 @@ public class LootTracker
 				ignoredItemIds.addAll(loot.getIgnoredItemIds());
 				lifetimeKillsTracked = stats.getKillsTracked();
 				lifetimeTimeActualSeconds = stats.getTotalTimeActualSeconds();
+
+				// ItemManager.getItemPrice()/getItemComposition() always call
+				// client.getItemDefinition() with no caching of their own, so they can only be
+				// called from the client thread. We're on a background executor here, so warm
+				// our own ItemPriceCache before bumping version, since that triggers a Swing
+				// refresh that reads prices on the EDT.
+				clientThread.invoke(() ->
+				{
+					for (int itemId : loot.getItemQuantities().keySet())
+					{
+						priceCache.warm(itemId);
+					}
+					version++;
+				});
 			}
 		});
 	}
@@ -141,7 +167,12 @@ public class LootTracker
 		{
 			sessionLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
 			lifetimeLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+
+			// Warm the price cache while we're on the client thread (LootReceived is a game
+			// event) so the panel's later EDT-side reads don't need ItemManager at all.
+			priceCache.warm(stack.getId());
 		}
+		version++;
 
 		goalManager.onLootValueChanged(sessionBoss, computeLifetimeGp());
 		persistLoot(sessionBoss, items);
@@ -152,7 +183,7 @@ public class LootTracker
 		long total = 0;
 		for (Map.Entry<Integer, Integer> entry : lifetimeLoot.entrySet())
 		{
-			total += (long) itemManager.getItemPrice(entry.getKey()) * entry.getValue();
+			total += priceCache.getPrice(entry.getKey()) * entry.getValue();
 		}
 		return total;
 	}
@@ -168,6 +199,7 @@ public class LootTracker
 		{
 			ignoredItemIds.add(itemId);
 		}
+		version++;
 
 		persistIgnoreList(trackedBoss, new HashSet<>(ignoredItemIds));
 	}

@@ -5,6 +5,7 @@ import com.camjewell.bosstracker.persistence.BossLoot;
 import com.camjewell.bosstracker.persistence.BossLootStore;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.BossStatsStore;
+import com.camjewell.bosstracker.util.ItemPriceCache;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -12,6 +13,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Getter;
 import net.runelite.api.Client;
+import net.runelite.client.callback.ClientThread;
 
 /**
  * Backs the side panel's Search tab: loads all-time {@link BossStats}/{@link BossLoot} for any
@@ -30,6 +32,12 @@ public class BossLookupManager
 
 	@Inject
 	private Client client;
+
+	@Inject
+	private ClientThread clientThread;
+
+	@Inject
+	private ItemPriceCache priceCache;
 
 	@Getter
 	private Boss boss;
@@ -79,7 +87,18 @@ public class BossLookupManager
 				this.stats = loadedStats;
 				lootItemQuantities.clear();
 				lootItemQuantities.putAll(loadedLoot.getItemQuantities());
-				version++;
+
+				// See LootTracker.ensureLoaded: warm the price cache on the client thread
+				// before bumping version, since getItemPrice() falls back to a
+				// client-thread-only call when an item isn't already cached.
+				clientThread.invoke(() ->
+				{
+					for (int itemId : loadedLoot.getItemQuantities().keySet())
+					{
+						priceCache.warm(itemId);
+					}
+					version++;
+				});
 			}
 		});
 	}

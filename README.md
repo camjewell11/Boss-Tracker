@@ -54,6 +54,33 @@ Settings are grouped into four sections:
 - **Loot Display** — whether the loot grid shows this session's loot or all-time loot for the
   currently tracked boss.
 
+## How to Use
+
+Enable the plugin and open its side panel from the RuneLite toolbar icon. The panel has three
+tabs:
+
+- **Session** — the live view. Kill a tracked boss (see the boss list in Features above) and a
+  session starts automatically — no setup required. From here you can Pause/Resume/End the
+  session, switch between ACTUAL and VIRTUAL KPH calc mode, and view the loot grid for the boss
+  you're currently tracking.
+  - **Boss goals**: right-click the goals section to set a target end kill count and/or a loot
+    value (GP) goal for the boss you're currently tracking. Progress (bar, KPH, time-to-goal,
+    current/target GP) updates live, and you'll get a one-time chat notification when a goal is
+    reached (if enabled in config). Right-click again to reset a goal.
+  - **Loot grid**: right-click an item to ignore/unignore it (useful for hiding junk drops from
+    GP totals). Toggle the `lootDisplayMode` config to switch the grid between this session's
+    loot and the boss's all-time loot.
+- **History** — every session you've completed (ended manually, via `!End`, by timing out, or by
+  switching bosses) is logged here. Click an entry to expand its stats and loot; click "Delete"
+  to remove one.
+- **Search** — look up all-time stats and loot for *any* tracked boss by name or alias (e.g.
+  "cox", "vetion", "kbd"), whether or not you're currently tracking it. Includes a "Delete Data"
+  option to wipe a boss's saved stats and loot.
+
+Chat commands work at any time: `!Info` announces your current session, `!End` ends it, `!Pause`
+and `!Resume` control it manually. All display/behavior details (which stats show, KPH
+calculation method, goal notifications, etc.) are configurable — see Configuration above.
+
 ## Building
 
 Requires a JDK compatible with RuneLite's `example-plugin` template (Java 11 target).
@@ -66,6 +93,14 @@ Requires a JDK compatible with RuneLite's `example-plugin` template (Java 11 tar
 
 `./gradlew run` launches an unauthenticated development client — log in via a
 [Jagex account](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts) to test in-game.
+
+If `./gradlew run`/`test` (or IntelliJ's Gradle integration) fails to resolve
+`:testRuntimeClasspath` with an error like "Could not find lwjgl-*-natives-linux-arm64.jar", it's
+caused by a stale/incomplete `mavenLocal()` (`~/.m2/repository`) cache silently shadowing the
+real repositories for that dependency — this build no longer declares `mavenLocal()` for exactly
+that reason. If you still hit it (e.g. via a different local Gradle config), removing the
+incomplete `org.lwjgl` entries from `~/.m2/repository` or clearing that repo from your Gradle
+setup resolves it.
 
 ## License
 

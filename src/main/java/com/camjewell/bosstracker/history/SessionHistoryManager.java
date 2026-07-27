@@ -2,6 +2,7 @@ package com.camjewell.bosstracker.history;
 
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
 import com.camjewell.bosstracker.persistence.SessionHistoryStore;
+import com.camjewell.bosstracker.util.ItemPriceCache;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -9,6 +10,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Getter;
 import net.runelite.api.Client;
+import net.runelite.client.callback.ClientThread;
 
 /**
  * Holds the in-memory list of past session entries shown on the side panel's History tab.
@@ -24,6 +26,12 @@ public class SessionHistoryManager
 
 	@Inject
 	private Client client;
+
+	@Inject
+	private ClientThread clientThread;
+
+	@Inject
+	private ItemPriceCache priceCache;
 
 	@Getter
 	private final List<SessionHistoryEntry> entries = new ArrayList<>();
@@ -61,8 +69,22 @@ public class SessionHistoryManager
 			List<SessionHistoryEntry> loaded = store.loadAll(accountHash);
 			entries.clear();
 			entries.addAll(loaded);
-			version++;
-			loading = false;
+
+			// See LootTracker.ensureLoaded: warm the price cache on the client thread
+			// before bumping version, since getItemPrice() falls back to a
+			// client-thread-only call when an item isn't already cached.
+			clientThread.invoke(() ->
+			{
+				for (SessionHistoryEntry entry : loaded)
+				{
+					for (int itemId : entry.getLootItemQuantities().keySet())
+					{
+						priceCache.warm(itemId);
+					}
+				}
+				version++;
+				loading = false;
+			});
 		});
 	}
 
