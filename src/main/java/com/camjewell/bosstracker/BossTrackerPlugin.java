@@ -131,7 +131,7 @@ public class BossTrackerPlugin extends Plugin
 		chatCommandManager.registerCommandAsync("!Pause", this::pauseCommand);
 		chatCommandManager.registerCommandAsync("!Resume", this::resumeCommand);
 
-		icon = ImageUtil.loadImageResource(getClass(), "/icon.png");
+		icon = ImageUtil.loadImageResource(getClass(), "icon.png");
 		navButton = NavigationButton.builder()
 			.tooltip("Boss Tracker")
 			.icon(icon)
@@ -160,7 +160,15 @@ public class BossTrackerPlugin extends Plugin
 		overlayManager.remove(overlay);
 		overlayManager.remove(goalOverlay);
 
-		executor.shutdownNow();
+		// An in-progress session that was only paused (e.g. logging out) rather than explicitly
+		// ended is otherwise lost for good if the client closes before the user hits "End
+		// Session": end() persists its stats/history now, and shutdown() (not shutdownNow())
+		// lets that just-queued write actually run instead of being cancelled.
+		if (sessionManager.getSession() != null)
+		{
+			sessionManager.end();
+		}
+		executor.shutdown();
 	}
 
 	@Subscribe

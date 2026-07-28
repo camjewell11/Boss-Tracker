@@ -66,14 +66,12 @@ public class SessionManager
 
 	private final FamilyKillClock familyClock = new FamilyKillClock();
 
-	private NPC currentAttackedNpc;
 	private Boss currentAttackedBoss;
 	private String currentAttackedNpcName;
 	private int attackCount;
 	private int ticksSinceLastAttack;
 	private int currentAttackTimeoutTicks;
 	private boolean earlyStartPending;
-	private boolean deathHandled;
 	private boolean autoResumed;
 	private int ticksSinceTimeoutCheck;
 
@@ -246,7 +244,6 @@ public class SessionManager
 			return;
 		}
 
-		currentAttackedNpc = npc;
 		ticksSinceLastAttack = 0;
 		earlyStartPending = false;
 
@@ -315,8 +312,6 @@ public class SessionManager
 			}
 		}
 
-		pollForBossDeath();
-
 		ticksSinceTimeoutCheck++;
 		if (ticksSinceTimeoutCheck >= 2)
 		{
@@ -326,27 +321,6 @@ public class SessionManager
 			{
 				checkSessionTimeout();
 			}
-		}
-	}
-
-	private void pollForBossDeath()
-	{
-		if (currentAttackedNpc == null)
-		{
-			return;
-		}
-		if (currentAttackedNpc.isDead() && !deathHandled)
-		{
-			if (currentAttackedBoss != null && !currentAttackedBoss.isMultiPhase())
-			{
-				familyClock.clear(clockKey(currentAttackedBoss, currentAttackedNpcName));
-				attackCount = 0;
-			}
-			deathHandled = true;
-		}
-		else if (!currentAttackedNpc.isDead())
-		{
-			deathHandled = false;
 		}
 	}
 
@@ -409,7 +383,6 @@ public class SessionManager
 			session = null;
 			familyClock.clearAll();
 			attackCount = 0;
-			currentAttackedNpc = null;
 			currentAttackedBoss = null;
 			currentAttackedNpcName = null;
 		}

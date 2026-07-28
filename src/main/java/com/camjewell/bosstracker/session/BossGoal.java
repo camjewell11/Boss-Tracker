@@ -31,9 +31,15 @@ public class BossGoal
 		this.boss = boss;
 	}
 
+	/**
+	 * A KC goal only counts as set if there's an actual range to work through. Guards against the
+	 * degenerate case where the goal dialog is used only to set a loot goal and leaves the KC
+	 * fields at their auto-filled default (the live KC for both start and end) — without this
+	 * check, that would read as an instantly-complete zero-kill KC goal.
+	 */
 	public boolean isSet()
 	{
-		return endKc > 0;
+		return endKc > startKc;
 	}
 
 	public int killsDone(int currentKc)

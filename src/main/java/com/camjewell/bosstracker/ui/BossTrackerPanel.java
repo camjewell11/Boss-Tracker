@@ -161,11 +161,11 @@ public class BossTrackerPanel extends PluginPanel
 		sessionViewPanel.setLayout(new BoxLayout(sessionViewPanel, BoxLayout.Y_AXIS));
 		sessionViewPanel.setOpaque(false);
 		sessionViewPanel.add(buildBossInfoPanel());
-		sessionViewPanel.add(buildPauseAndResumeButtons());
 		sessionViewPanel.add(Box.createRigidArea(new Dimension(0, 14)));
 		sessionViewPanel.add(buildBossGoalsPanel());
 		sessionViewPanel.add(Box.createRigidArea(new Dimension(0, 14)));
 		sessionViewPanel.add(buildLootPanel());
+		sessionViewPanel.add(buildPauseAndResumeButtons());
 		sessionViewPanel.add(buildSessionEndButton());
 
 		historyViewPanel.setLayout(new BoxLayout(historyViewPanel, BoxLayout.Y_AXIS));
@@ -244,11 +244,22 @@ public class BossTrackerPanel extends PluginPanel
 
 	private JPanel buildSearchBar()
 	{
-		JPanel container = new JPanel(new BorderLayout(4, 0));
+		JPanel container = new JPanel(new BorderLayout(4, 0))
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
 		container.setOpaque(false);
 		container.setBorder(new EmptyBorder(0, 0, 8, 0));
 
 		searchField.setToolTipText("Boss name or alias, e.g. \"cox\", \"vetion\", \"General Graardor\"");
+		searchField.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		searchField.setForeground(Color.WHITE);
+		searchField.setCaretColor(Color.WHITE);
+		searchField.setBorder(new CompoundBorder(new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49)), new EmptyBorder(3, 5, 3, 5)));
 		JButton searchButton = new JButton("Search");
 		styleButton(searchButton);
 
@@ -371,7 +382,7 @@ public class BossTrackerPanel extends PluginPanel
 
 		buttons.add(pauseResumeButton);
 		buttons.add(calcModeButton);
-		container.add(buttons, BorderLayout.WEST);
+		container.add(buttons, BorderLayout.CENTER);
 		return container;
 	}
 
@@ -419,12 +430,17 @@ public class BossTrackerPanel extends PluginPanel
 		progressBarPanel.add(goalProgressBar);
 
 		goalLootLabel.setBorder(new EmptyBorder(4, 5, 7, 5));
+		goalLootLabel.setHorizontalAlignment(SwingConstants.LEFT);
+
+		JPanel goalLootLabelWrapper = new JPanel(new BorderLayout());
+		goalLootLabelWrapper.setOpaque(false);
+		goalLootLabelWrapper.add(goalLootLabel, BorderLayout.WEST);
 
 		JPanel southPanel = new JPanel();
 		southPanel.setLayout(new BoxLayout(southPanel, BoxLayout.Y_AXIS));
 		southPanel.setOpaque(false);
 		southPanel.add(progressBarPanel);
-		southPanel.add(goalLootLabel);
+		southPanel.add(goalLootLabelWrapper);
 
 		goalsPanel.add(iconPanel, BorderLayout.WEST);
 		goalsPanel.add(kphTtgPanel, BorderLayout.CENTER);
@@ -639,7 +655,7 @@ public class BossTrackerPanel extends PluginPanel
 			: sessionManager.computeActualElapsedSeconds() / 3600.0;
 
 		lootGpPerKillLabel.setText(htmlLabel("GP/Kill: ", kills > 0 ? formatGp(totalGp / kills) : "N/A"));
-		lootGpPerHourLabel.setText(htmlLabel("GP/Hr: ", hours > 0 ? formatGp(totalGp / hours) : "N/A"));
+		lootGpPerHourLabel.setText(htmlLabel("GP/Hr: ", hours > 0 ? formatGpAbbreviated(totalGp / hours) : "N/A"));
 		lootTotalGpLabel.setText(htmlLabel("Total GP: ", formatGp(totalGp)));
 
 		boolean showIgnored = showIgnoredLootButton.isSelected();
@@ -708,11 +724,25 @@ public class BossTrackerPanel extends PluginPanel
 	private String buildLootTooltip(int itemId, int quantity, double totalValue)
 	{
 		String name = priceCache.getName(itemId);
-		return "<html>" + name + "<br>Qty: " + quantity + "<br>Value: " + formatGp(totalValue) + "</html>";
+		return "<html>" + name + "<br>Qty: " + quantity + "<br>GP/Item: " + formatGp(priceCache.getPrice(itemId))
+			+ "<br>Value: " + formatGp(totalValue) + "</html>";
 	}
 
 	private static String formatGp(double value)
 	{
+		return String.format("%,.0f", value);
+	}
+
+	private static String formatGpAbbreviated(double value)
+	{
+		if (Math.abs(value) >= 1_000_000)
+		{
+			return String.format("%,.2fm", value / 1_000_000);
+		}
+		if (Math.abs(value) >= 1_000)
+		{
+			return String.format("%,.2fk", value / 1_000);
+		}
 		return String.format("%,.0f", value);
 	}
 
@@ -783,7 +813,7 @@ public class BossTrackerPanel extends PluginPanel
 
 		JPanel buttonWrapper = new JPanel(new GridLayout(1, 1, 5, 5));
 		buttonWrapper.setOpaque(false);
-		buttonWrapper.setBorder(new EmptyBorder(3, 10, 8, 0));
+		buttonWrapper.setBorder(new EmptyBorder(3, 10, 8, 10));
 
 		JButton endSessionButton = new JButton("End Session");
 		styleButton(endSessionButton);
@@ -794,7 +824,7 @@ public class BossTrackerPanel extends PluginPanel
 		});
 
 		buttonWrapper.add(endSessionButton);
-		container.add(buttonWrapper, BorderLayout.WEST);
+		container.add(buttonWrapper, BorderLayout.CENTER);
 		return container;
 	}
 
@@ -894,6 +924,7 @@ public class BossTrackerPanel extends PluginPanel
 
 		JButton deleteButton = new JButton("Delete Data");
 		styleButton(deleteButton);
+		deleteButton.setEnabled(stats.getKillsTracked() > 0 || !lootMap.isEmpty());
 		deleteButton.addActionListener(e ->
 		{
 			int confirm = JOptionPane.showConfirmDialog(this,
@@ -908,7 +939,6 @@ public class BossTrackerPanel extends PluginPanel
 
 		headerRow.add(iconLabel, BorderLayout.WEST);
 		headerRow.add(nameLabel, BorderLayout.CENTER);
-		headerRow.add(deleteButton, BorderLayout.EAST);
 
 		JPanel detailPanel = new JPanel();
 		detailPanel.setLayout(new BoxLayout(detailPanel, BoxLayout.Y_AXIS));
@@ -966,8 +996,14 @@ public class BossTrackerPanel extends PluginPanel
 			detailPanel.add(lootGrid);
 		}
 
+		JPanel deleteButtonPanel = new JPanel(new GridLayout(1, 1, 5, 5));
+		deleteButtonPanel.setOpaque(false);
+		deleteButtonPanel.setBorder(new EmptyBorder(0, 8, 8, 8));
+		deleteButtonPanel.add(deleteButton);
+
 		resultPanel.add(headerRow, BorderLayout.NORTH);
 		resultPanel.add(detailPanel, BorderLayout.CENTER);
+		resultPanel.add(deleteButtonPanel, BorderLayout.SOUTH);
 		return resultPanel;
 	}
 
@@ -1028,8 +1064,15 @@ public class BossTrackerPanel extends PluginPanel
 		deleteButton.setPreferredSize(new Dimension(28, deleteButton.getPreferredSize().height));
 		deleteButton.addActionListener(e ->
 		{
-			historyManager.delete(entry);
-			refreshHistoryPanel();
+			int confirm = JOptionPane.showConfirmDialog(this,
+				"Delete this session (" + entry.getBossName() + " - " + entry.getKillsThisSession() + " kills)? "
+					+ "This cannot be undone.",
+				"Delete Session", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+			if (confirm == JOptionPane.YES_OPTION)
+			{
+				historyManager.delete(entry);
+				refreshHistoryPanel();
+			}
 		});
 
 		headerRow.add(expandButton, BorderLayout.CENTER);

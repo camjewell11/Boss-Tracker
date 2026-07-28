@@ -2,15 +2,18 @@ package com.camjewell.bosstracker.ui;
 
 import com.camjewell.bosstracker.BossTrackerConfig;
 import com.camjewell.bosstracker.BossTrackerConfig.GoalOverlayRow;
+import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.session.BossGoal;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.session.SessionManager;
+import com.camjewell.bosstracker.util.ItemPriceCache;
 import com.camjewell.bosstracker.util.TimeFormat;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.util.Map;
 import javax.inject.Inject;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.overlay.Overlay;
@@ -36,18 +39,22 @@ public class BossGoalOverlay extends Overlay
 	private final SessionManager sessionManager;
 	private final GoalManager goalManager;
 	private final ItemManager itemManager;
+	private final LootTracker lootTracker;
+	private final ItemPriceCache priceCache;
 	private final PanelComponent panelComponent = new PanelComponent();
 	private final ProgressBarComponent progressBarComponent = new ProgressBarComponent();
 
 	@Inject
 	private BossGoalOverlay(BossTrackerConfig config, SessionManager sessionManager, GoalManager goalManager,
-		ItemManager itemManager)
+		ItemManager itemManager, LootTracker lootTracker, ItemPriceCache priceCache)
 	{
 		setPosition(OverlayPosition.TOP_LEFT);
 		this.config = config;
 		this.sessionManager = sessionManager;
 		this.goalManager = goalManager;
 		this.itemManager = itemManager;
+		this.lootTracker = lootTracker;
+		this.priceCache = priceCache;
 	}
 
 	@Override
@@ -56,8 +63,11 @@ public class BossGoalOverlay extends Overlay
 		BossSession session = sessionManager.getSession();
 		BossGoal goal = goalManager.getGoal();
 
+		boolean kcGoalSet = goal != null && goal.isSet();
+		boolean lootGoalSet = goal != null && goal.isLootGoalSet();
+
 		if (!config.displayBossGoalsOverlay() || session == null || goal == null
-			|| goal.getBoss() != session.getBoss() || !goal.isSet())
+			|| goal.getBoss() != session.getBoss() || (!kcGoalSet && !lootGoalSet))
 		{
 			return null;
 		}
@@ -66,15 +76,20 @@ public class BossGoalOverlay extends Overlay
 		int killsDone = goal.killsDone(currentKc);
 		int totalToGet = goal.totalKillsToGet();
 		int killsLeft = Math.max(0, totalToGet - killsDone);
-		boolean complete = goal.isComplete(currentKc);
-		double percentDone = totalToGet > 0 ? 100.0 * killsDone / totalToGet : 0;
-		double ttgHours = session.getKillsPerHour() > 0 ? killsLeft / session.getKillsPerHour() : 0;
+		long currentGp = computeCurrentLifetimeGp();
+		long lootGoalGp = goal.getLootGoalGp();
+
+		boolean complete = kcGoalSet ? goal.isComplete(currentKc) : goal.isLootGoalComplete(currentGp);
+		double percentDone = kcGoalSet
+			? (totalToGet > 0 ? 100.0 * killsDone / totalToGet : 0)
+			: (lootGoalGp > 0 ? 100.0 * currentGp / lootGoalGp : 0);
+		double ttgHours = (kcGoalSet && session.getKillsPerHour() > 0) ? killsLeft / session.getKillsPerHour() : 0;
 
 		panelComponent.getChildren().clear();
 		panelComponent.setPreferredSize(new Dimension(150, 0));
 
-		LineComponent topLine = rowFor(config.topGoalOverlay(), killsDone, killsLeft, totalToGet, ttgHours, session, complete);
-		LineComponent bottomLine = rowFor(config.bottomGoalOverlay(), killsDone, killsLeft, totalToGet, ttgHours, session, complete);
+		LineComponent topLine = rowFor(config.topGoalOverlay(), killsDone, killsLeft, kcGoalSet, ttgHours, session, complete);
+		LineComponent bottomLine = rowFor(config.bottomGoalOverlay(), killsDone, killsLeft, kcGoalSet, ttgHours, session, complete);
 		SplitComponent linesSplit = SplitComponent.builder()
 			.first(topLine)
 			.second(bottomLine)
@@ -111,15 +126,23 @@ public class BossGoalOverlay extends Overlay
 			progressBarComponent.setValue(percentDone);
 		}
 
-		if (config.displayRelativeKills())
+		if (kcGoalSet)
 		{
-			progressBarComponent.setLeftLabel("0");
-			progressBarComponent.setRightLabel(String.valueOf(totalToGet));
+			if (config.displayRelativeKills())
+			{
+				progressBarComponent.setLeftLabel("0");
+				progressBarComponent.setRightLabel(String.valueOf(totalToGet));
+			}
+			else
+			{
+				progressBarComponent.setLeftLabel(String.valueOf(goal.getStartKc()));
+				progressBarComponent.setRightLabel(String.valueOf(goal.getEndKc()));
+			}
 		}
 		else
 		{
-			progressBarComponent.setLeftLabel(String.valueOf(goal.getStartKc()));
-			progressBarComponent.setRightLabel(String.valueOf(goal.getEndKc()));
+			progressBarComponent.setLeftLabel(formatGp(currentGp));
+			progressBarComponent.setRightLabel(formatGp(lootGoalGp));
 		}
 
 		panelComponent.getChildren().add(iconAndLines);
@@ -128,7 +151,22 @@ public class BossGoalOverlay extends Overlay
 		return panelComponent.render(graphics);
 	}
 
-	private LineComponent rowFor(GoalOverlayRow row, int killsDone, int killsLeft, int totalToGet, double ttgHours,
+	private long computeCurrentLifetimeGp()
+	{
+		long total = 0;
+		for (Map.Entry<Integer, Integer> entry : lootTracker.getLifetimeLoot().entrySet())
+		{
+			total += priceCache.getPrice(entry.getKey()) * entry.getValue();
+		}
+		return total;
+	}
+
+	private static String formatGp(long value)
+	{
+		return String.format("%,d", value);
+	}
+
+	private LineComponent rowFor(GoalOverlayRow row, int killsDone, int killsLeft, boolean kcGoalSet, double ttgHours,
 		BossSession session, boolean complete)
 	{
 		switch (row)
@@ -136,17 +174,17 @@ public class BossGoalOverlay extends Overlay
 			case KILLS_DONE:
 				return LineComponent.builder()
 					.left("Kills Done:")
-					.right(String.valueOf(complete ? totalToGet : killsDone))
+					.right(String.valueOf(killsDone))
 					.build();
 			case KILLS_LEFT:
 				return LineComponent.builder()
 					.left("Kills Left:")
-					.right(String.valueOf(complete ? 0 : killsLeft))
+					.right(kcGoalSet ? String.valueOf(complete ? 0 : killsLeft) : "N/A")
 					.build();
 			case TTG:
 				return LineComponent.builder()
 					.left("TTG:")
-					.right(complete ? "00:00:00" : TimeFormat.minutesSeconds((int) (ttgHours * 3600)))
+					.right(!kcGoalSet ? "N/A" : complete ? "00:00:00" : TimeFormat.minutesSeconds((int) (ttgHours * 3600)))
 					.build();
 			case KPH:
 			default:
