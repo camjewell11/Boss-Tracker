@@ -27,19 +27,28 @@ of dozens of scattered per-boss special cases.
   dialog for a one-time chat notification when that boss's all-time loot value crosses the
   threshold.
 - **Loot tracking**: a per-boss loot grid (session or all-time, toggle via config) with item
-  icons, quantities, Grand Exchange values, GP/kill, and GP/hour, plus a per-item "ignore" option
-  to hide junk drops from the grid.
+  icons, quantities, Grand Exchange values (shown per-item in the hover tooltip), GP/kill, and an
+  abbreviated GP/hour (e.g. `1.23m/hr`), plus a per-item "ignore" option to hide junk drops from
+  the grid.
 - **Session history log**: every completed session (ended manually, via `!End`, by an inactivity
-  timeout, or by switching to a different boss) is saved to a collapsible, deletable log in its
-  own side panel tab — kills, KPH, average/fastest kill, idle time, session time, and a mini loot
-  grid per entry. History is stored as one JSON file per session under
-  `.runelite/boss-tracker/<accountHash>/history/`.
+  timeout, by switching to a different boss, or by closing the client mid-session) is saved to a
+  collapsible log in its own side panel tab — kills, KPH, average/fastest kill, idle time, session
+  time, and a mini loot grid per entry (see Slayer task detection below). Expanded entries stay
+  expanded when you switch tabs and back, and a "Collapse All" button clears them in one click.
+  Each entry can be deleted (with a confirmation prompt). History is stored as one JSON file per
+  session under `.runelite/boss-tracker/<accountHash>/history/`.
+- **Slayer task detection**: if a kill counts toward your current Slayer task, that session is
+  flagged for the rest of its duration and shown with the Slayer skill icon in the History tab.
+  Works automatically if the Slayer plugin is enabled; if it isn't, sessions simply aren't flagged.
 - **Boss search**: look up all-time stats and loot for any boss by name or alias (e.g. "cox",
   "vetion", "General Graardor") from the side panel's Search tab, whether or not you're currently
   tracking it — total KC, kills tracked, average KPH, fastest kill, total tracked time, GP/kill,
-  total GP, and a loot grid — with a "Delete Data" option to wipe a boss's saved stats and loot.
+  total GP, and a loot grid — with a "Delete Data" option (with a confirmation prompt, disabled
+  when there's nothing recorded yet) to wipe a boss's saved stats and loot.
 - Automatic session pause on logout, auto-resume when combat-relevant chat activity is seen while
-  paused, and an optional inactivity timeout to auto-end long-idle sessions.
+  paused, and an optional inactivity timeout to auto-end long-idle sessions. Closing the RuneLite
+  client entirely while a session is paused (rather than explicitly ending it) still persists that
+  session's stats and history instead of losing them.
 - Chat commands: `!Info`, `!End`, `!Pause`, `!Resume`.
 
 ## Configuration
@@ -70,12 +79,15 @@ tabs:
   - **Loot grid**: right-click an item to ignore/unignore it (useful for hiding junk drops from
     GP totals). Toggle the `lootDisplayMode` config to switch the grid between this session's
     loot and the boss's all-time loot.
-- **History** — every session you've completed (ended manually, via `!End`, by timing out, or by
-  switching bosses) is logged here. Click an entry to expand its stats and loot; click "Delete"
-  to remove one.
+- **History** — every session you've completed (ended manually, via `!End`, by timing out, by
+  switching bosses, or by closing the client mid-session) is logged here. Click an entry to
+  expand its stats and loot (a Slayer skill icon appears if the session was fought on a matching
+  Slayer task); click the ✕ and confirm to remove one, or use "Collapse All" to close every
+  expanded entry at once.
 - **Search** — look up all-time stats and loot for *any* tracked boss by name or alias (e.g.
   "cox", "vetion", "kbd"), whether or not you're currently tracking it. Includes a "Delete Data"
-  option to wipe a boss's saved stats and loot.
+  button below the result (disabled if there's nothing recorded yet) to wipe a boss's saved stats
+  and loot, with a confirmation prompt.
 
 Chat commands work at any time: `!Info` announces your current session, `!End` ends it, `!Pause`
 and `!Resume` control it manually. All display/behavior details (which stats show, KPH

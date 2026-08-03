@@ -39,6 +39,13 @@ public class BossSession
 	private int averageKillTimeSeconds;
 	private CalcMode calcMode = CalcMode.ACTUAL;
 
+	/**
+	 * Sticky for the life of the session: set once any kill is confirmed to have counted toward
+	 * an active Slayer task for this boss, and never cleared back to false even if the task
+	 * later completes or changes mid-session.
+	 */
+	private boolean onSlayerTask;
+
 	public BossSession(Boss boss)
 	{
 		this.boss = boss;

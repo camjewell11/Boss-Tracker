@@ -18,11 +18,13 @@ import java.util.concurrent.Executor;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.NPC;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
+import net.runelite.client.plugins.slayer.SlayerPluginService;
 
 /**
  * Owns the live {@link BossSession} and drives its lifecycle from game events. Replaces the
@@ -30,6 +32,7 @@ import net.runelite.client.chat.QueuedMessage;
  * {@link ChatKillParser}, per-boss data lives in {@link Boss}, and this class only orchestrates
  * session state transitions.
  */
+@Slf4j
 @Singleton
 public class SessionManager
 {
@@ -54,6 +57,15 @@ public class SessionManager
 	@Inject
 	private SessionHistoryStore historyStore;
 
+	/**
+	 * Bound via the Slayer plugin's own module, pulled in through {@code @PluginDependency} on
+	 * {@link com.camjewell.bosstracker.BossTrackerPlugin}. Only reports live task data while the
+	 * Slayer plugin is actually enabled and running; otherwise its fields stay at their unset
+	 * defaults (null/0), which {@link #isOnSlayerTaskFor} treats as "not on task".
+	 */
+	@Inject
+	private SlayerPluginService slayerPluginService;
+
 	@Getter
 	private BossSession session;
 
@@ -75,9 +87,12 @@ public class SessionManager
 	private boolean autoResumed;
 	private int ticksSinceTimeoutCheck;
 
+	private static final Duration PENDING_SELF_REPORTED_TIMEOUT = Duration.ofMinutes(2);
+
 	private Boss pendingSelfReportedBoss;
 	private Integer pendingKillCount;
 	private Integer pendingDurationSeconds;
+	private Instant pendingSelfReportedSince;
 
 	private Executor asyncExecutor;
 
@@ -110,28 +125,70 @@ public class SessionManager
 		if (kcBoss != null)
 		{
 			int killCount = ChatKillParser.parseKillCount(message);
+			log.debug("KC message matched boss={} killCount={} message=\"{}\"", kcBoss, killCount, message);
 			if (kcBoss.getTiming() == KillTiming.HITSPLAT)
 			{
 				finalizeHitsplatKill(kcBoss, killCount);
 			}
 			else
 			{
+				discardStalePendingSelfReported();
 				pendingSelfReportedBoss = kcBoss;
 				pendingKillCount = killCount;
+				markPendingTouched();
 				tryFinalizePendingSelfReported();
 			}
 			return;
 		}
 
-		if (pendingSelfReportedBoss != null)
+		// Checked unconditionally, not just while pendingSelfReportedBoss is already set: the
+		// kill-count and duration messages for a SELF_REPORTED boss (e.g. Chambers of Xeric) don't
+		// always arrive in the same order, so whichever shows up first must be buffered rather than
+		// discarded, or the kill silently never finalizes if the duration happens to lead.
+		Integer seconds = ChatKillParser.parseDurationSeconds(message, inFightCavesOrInferno);
+		if (seconds != null)
 		{
-			Integer seconds = ChatKillParser.parseDurationSeconds(message, inFightCavesOrInferno);
-			if (seconds != null)
-			{
-				pendingDurationSeconds = seconds;
-				tryFinalizePendingSelfReported();
-			}
+			discardStalePendingSelfReported();
+			log.debug("Duration message matched pendingBoss={} seconds={} message=\"{}\"",
+				pendingSelfReportedBoss, seconds, message);
+			pendingDurationSeconds = seconds;
+			markPendingTouched();
+			tryFinalizePendingSelfReported();
 		}
+		else if (pendingSelfReportedBoss != null)
+		{
+			log.debug("Awaiting duration for pendingBoss={}, unmatched message=\"{}\"", pendingSelfReportedBoss, message);
+		}
+	}
+
+	private void markPendingTouched()
+	{
+		if (pendingSelfReportedSince == null)
+		{
+			pendingSelfReportedSince = Instant.now();
+		}
+	}
+
+	/**
+	 * Drops a half-paired self-reported kill (kill-count message received with no matching
+	 * duration, or vice versa) once it's old enough that the missing half clearly isn't coming.
+	 * Without this, a single dropped/unparsed message on one kill could sit around indefinitely
+	 * and get wrongly paired with an unrelated kill of the same boss much later.
+	 */
+	private void discardStalePendingSelfReported()
+	{
+		if (pendingSelfReportedSince == null
+			|| Duration.between(pendingSelfReportedSince, Instant.now()).compareTo(PENDING_SELF_REPORTED_TIMEOUT) <= 0)
+		{
+			return;
+		}
+
+		log.debug("Discarding stale pending self-reported kill: boss={} killCount={} durationSeconds={}",
+			pendingSelfReportedBoss, pendingKillCount, pendingDurationSeconds);
+		pendingSelfReportedBoss = null;
+		pendingKillCount = null;
+		pendingDurationSeconds = null;
+		pendingSelfReportedSince = null;
 	}
 
 	private void tryFinalizePendingSelfReported()
@@ -142,6 +199,12 @@ public class SessionManager
 			pendingSelfReportedBoss = null;
 			pendingKillCount = null;
 			pendingDurationSeconds = null;
+			pendingSelfReportedSince = null;
+		}
+		else if (pendingSelfReportedBoss != null || pendingDurationSeconds != null)
+		{
+			log.debug("Still awaiting finalize: boss={} killCount={} durationSeconds={}",
+				pendingSelfReportedBoss, pendingKillCount, pendingDurationSeconds);
 		}
 	}
 
@@ -190,11 +253,38 @@ public class SessionManager
 		session.setCumulativeKillTimeSeconds(session.getCumulativeKillTimeSeconds() + durationSeconds);
 		session.setFastestKillSeconds(Math.min(session.getFastestKillSeconds(), durationSeconds));
 		session.setLastKillAt(Instant.now());
+		if (isOnSlayerTaskFor(boss))
+		{
+			session.setOnSlayerTask(true);
+		}
 
 		recalculateKph();
 		maybeAnnounceKillDuration(boss, durationSeconds);
 		maybePrintKphInChat();
 		persistKill(boss, killCount, durationSeconds);
+	}
+
+	/**
+	 * @return true if a Slayer task is currently active, has kills remaining, and its target
+	 * resolves (by exact name, alias, or NPC name) to this boss.
+	 */
+	private boolean isOnSlayerTaskFor(Boss boss)
+	{
+		if (slayerPluginService == null)
+		{
+			return false;
+		}
+		String task = slayerPluginService.getTask();
+		if (task == null || task.isEmpty() || slayerPluginService.getRemainingAmount() <= 0)
+		{
+			return false;
+		}
+		Boss taskBoss = Boss.byNameOrAlias(task);
+		if (taskBoss == null)
+		{
+			taskBoss = Boss.byNpcName(task);
+		}
+		return taskBoss == boss;
 	}
 
 	private void recalculateKph()
@@ -388,6 +478,30 @@ public class SessionManager
 		}
 	}
 
+	/**
+	 * Equivalent to {@link #end()}, but writes the session directly instead of handing it to
+	 * {@code asyncExecutor}. Called only from the plugin's shutDown() when the whole client is
+	 * closing: a task queued on the executor can be lost if the process exits before that thread
+	 * gets to run it, and shutDown() isn't allowed to block on executor.awaitTermination() to wait
+	 * for it. This runs once, inline, off the game tick loop, so blocking briefly here is safe.
+	 */
+	public void endForClientShutdown()
+	{
+		if (session != null)
+		{
+			BossSession endedSession = session;
+			long accountHash = client.getAccountHash();
+			writeSessionStats(accountHash, endedSession, computeFinalSessionSeconds(endedSession));
+			writeHistoryEntry(accountHash, endedSession);
+			lastCompletedSession = endedSession;
+			session = null;
+			familyClock.clearAll();
+			attackCount = 0;
+			currentAttackedBoss = null;
+			currentAttackedNpcName = null;
+		}
+	}
+
 	public void announceCurrentInfo()
 	{
 		BossSession toAnnounce = session != null ? session : lastCompletedSession;
@@ -469,21 +583,35 @@ public class SessionManager
 			return;
 		}
 		long accountHash = client.getAccountHash();
-		long elapsed = Duration.between(endedSession.getSessionStart(), Instant.now()).getSeconds();
-		long actualSeconds = elapsed + endedSession.getTimerOffsetSeconds() - endedSession.getPausedSeconds();
-		asyncExecutor.execute(() ->
-		{
-			BossStats stats = statsStore.load(accountHash, endedSession.getBoss());
-			stats.setTotalTimeActualSeconds(stats.getTotalTimeActualSeconds() + actualSeconds);
-			statsStore.save(accountHash, endedSession.getBoss(), stats);
-		});
+		long actualSeconds = computeFinalSessionSeconds(endedSession);
+		asyncExecutor.execute(() -> writeSessionStats(accountHash, endedSession, actualSeconds));
+	}
+
+	private void writeSessionStats(long accountHash, BossSession endedSession, long actualSeconds)
+	{
+		BossStats stats = statsStore.load(accountHash, endedSession.getBoss());
+		stats.setTotalTimeActualSeconds(stats.getTotalTimeActualSeconds() + actualSeconds);
+		statsStore.save(accountHash, endedSession.getBoss(), stats);
+	}
+
+	/**
+	 * Elapsed session time up to the last real kill, excluding any trailing idle time between
+	 * that kill and whenever the session actually got ended (which could be minutes or days
+	 * later, e.g. with a very high/disabled session timeout) — that dead time shouldn't count
+	 * against KPH/idle stats just because the player forgot to end the session. Only used when
+	 * finalizing a session for persistence; the live in-progress display still uses
+	 * {@link #computeActualElapsedSeconds()} so it keeps counting up in real time while the
+	 * session is still open.
+	 */
+	private int computeFinalSessionSeconds(BossSession endedSession)
+	{
+		long elapsed = Duration.between(endedSession.getSessionStart(), endedSession.getLastKillAt()).getSeconds();
+		return (int) elapsed + endedSession.getTimerOffsetSeconds() - endedSession.getPausedSeconds();
 	}
 
 	/**
 	 * Records a history-log entry for a just-ended session (via {@link #end()} or a boss switch
-	 * in {@link #finalizeKill}). Both call sites invoke this while {@code this.session} still
-	 * refers to {@code endedSession}, so {@link #computeActualElapsedSeconds()} correctly
-	 * reflects its duration. Skips sessions with no kills to avoid empty log noise.
+	 * in {@link #finalizeKill}). Skips sessions with no kills to avoid empty log noise.
 	 */
 	private void persistHistory(BossSession endedSession)
 	{
@@ -491,20 +619,33 @@ public class SessionManager
 		{
 			return;
 		}
-
 		long accountHash = client.getAccountHash();
+		SessionHistoryEntry entry = buildHistoryEntry(endedSession);
+		asyncExecutor.execute(() -> historyStore.save(accountHash, entry));
+	}
 
+	private void writeHistoryEntry(long accountHash, BossSession endedSession)
+	{
+		if (endedSession.getKillsThisSession() == 0)
+		{
+			return;
+		}
+		historyStore.save(accountHash, buildHistoryEntry(endedSession));
+	}
+
+	private SessionHistoryEntry buildHistoryEntry(BossSession endedSession)
+	{
 		SessionHistoryEntry entry = new SessionHistoryEntry();
 		entry.setBossName(endedSession.getBoss().getBossName());
 		entry.setEndedAtEpochMilli(System.currentTimeMillis());
 		entry.setKillsThisSession(endedSession.getKillsThisSession());
-		entry.setSessionDurationSeconds(computeActualElapsedSeconds());
+		entry.setSessionDurationSeconds(computeFinalSessionSeconds(endedSession));
 		entry.setKillsPerHour(endedSession.getKillsPerHour());
 		entry.setAverageKillTimeSeconds(endedSession.getAverageKillTimeSeconds());
 		entry.setFastestKillSeconds(endedSession.getFastestKillSeconds());
 		entry.setIdleSeconds(endedSession.getIdleSeconds());
+		entry.setOnSlayerTask(endedSession.isOnSlayerTask());
 		entry.setLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionLoot()));
-
-		asyncExecutor.execute(() -> historyStore.save(accountHash, entry));
+		return entry;
 	}
 }

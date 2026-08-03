@@ -34,8 +34,10 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.loottracker.LootReceived;
+import net.runelite.client.plugins.slayer.SlayerPlugin;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
@@ -49,6 +51,7 @@ import net.runelite.http.api.loottracker.LootRecordType;
 	description = "Tracks kills per hour, session stats, boss goals, loot and historical stats across OSRS bosses",
 	tags = {"pvm", "boss", "kph", "kills per hour", "bossing", "kill times", "loot", "goals"}
 )
+@PluginDependency(SlayerPlugin.class)
 public class BossTrackerPlugin extends Plugin
 {
 	private static final int[] FIGHT_CAVE_REGION = {9551};
@@ -162,13 +165,13 @@ public class BossTrackerPlugin extends Plugin
 
 		// An in-progress session that was only paused (e.g. logging out) rather than explicitly
 		// ended is otherwise lost for good if the client closes before the user hits "End
-		// Session": end() persists its stats/history now, and shutdown() (not shutdownNow())
-		// lets that just-queued write actually run instead of being cancelled.
-		if (sessionManager.getSession() != null)
-		{
-			sessionManager.end();
-		}
-		executor.shutdown();
+		// Session". A normal end() only queues the write onto asyncExecutor, which is not
+		// enough here: executor.shutdown() doesn't wait for that queued task, and shutDown()
+		// isn't allowed to block on awaitTermination() to wait for it either — so the whole
+		// process can exit before the write ever runs. endForClientShutdown() writes it
+		// synchronously instead, right here, before shutDown() returns.
+		sessionManager.endForClientShutdown();
+		executor.shutdownNow();
 	}
 
 	@Subscribe

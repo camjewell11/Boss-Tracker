@@ -23,5 +23,6 @@ public class SessionHistoryEntry
 	private int averageKillTimeSeconds;
 	private int fastestKillSeconds;
 	private int idleSeconds;
+	private boolean onSlayerTask;
 	private Map<Integer, Integer> lootItemQuantities = new LinkedHashMap<>();
 }
