@@ -269,8 +269,8 @@ public class BossTrackerPanel extends PluginPanel
 			@Override
 			protected void configureScrollBarColors()
 			{
-				this.thumbColor = ColorScheme.DARK_GRAY_COLOR;
-				this.trackColor = new Color(30, 30, 30);
+				this.thumbColor = ColorScheme.MEDIUM_GRAY_COLOR;
+				this.trackColor = ColorScheme.DARKER_GRAY_COLOR;
 			}
 
 			@Override
@@ -703,11 +703,11 @@ public class BossTrackerPanel extends PluginPanel
 		lootGpPerKillLabel.setFont(FontManager.getRunescapeSmallFont());
 		lootGpPerHourLabel.setFont(FontManager.getRunescapeSmallFont());
 		lootTotalGpLabel.setFont(FontManager.getRunescapeSmallFont());
-		lootGpPerKillLabel.setHorizontalAlignment(SwingConstants.LEFT);
-		lootGpPerHourLabel.setHorizontalAlignment(SwingConstants.CENTER);
+		lootGpPerHourLabel.setHorizontalAlignment(SwingConstants.LEFT);
+		lootGpPerKillLabel.setHorizontalAlignment(SwingConstants.CENTER);
 		lootTotalGpLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-		statsRow.add(lootGpPerKillLabel);
 		statsRow.add(lootGpPerHourLabel);
+		statsRow.add(lootGpPerKillLabel);
 		statsRow.add(lootTotalGpLabel);
 
 		headerPanel.add(toggleRow, BorderLayout.NORTH);
@@ -725,8 +725,8 @@ public class BossTrackerPanel extends PluginPanel
 	{
 		if (display == null)
 		{
-			lootGpPerKillLabel.setText(htmlLabelStacked("GP/Kill", "N/A", "left"));
-			lootGpPerHourLabel.setText(htmlLabelStacked("GP/Hr", "N/A"));
+			lootGpPerHourLabel.setText(htmlLabelStacked("GP/Hr", "N/A", "left"));
+			lootGpPerKillLabel.setText(htmlLabelStacked("GP/Kill", "N/A"));
 			lootTotalGpLabel.setText(htmlLabelStacked("Total GP", "N/A", "right"));
 			if (lastRenderedLootBoss != null)
 			{
@@ -756,8 +756,8 @@ public class BossTrackerPanel extends PluginPanel
 			? lootTracker.getLifetimeTimeActualSeconds() / 3600.0
 			: sessionManager.computeActualElapsedSeconds() / 3600.0;
 
-		lootGpPerKillLabel.setText(htmlLabelStacked("GP/Kill", kills > 0 ? formatGp(totalGp / kills) : "N/A", "left"));
-		lootGpPerHourLabel.setText(htmlLabelStacked("GP/Hr", hours > 0 ? formatGpAbbreviated(totalGp / hours) : "N/A"));
+		lootGpPerHourLabel.setText(htmlLabelStacked("GP/Hr", hours > 0 ? formatGpAbbreviated(totalGp / hours) : "N/A", "left"));
+		lootGpPerKillLabel.setText(htmlLabelStacked("GP/Kill", kills > 0 ? formatGp(totalGp / kills) : "N/A"));
 		lootTotalGpLabel.setText(htmlLabelStacked("Total GP", formatGp(totalGp), "right"));
 
 		boolean showIgnored = showIgnoredLootButton.isSelected();
@@ -1091,7 +1091,7 @@ public class BossTrackerPanel extends PluginPanel
 
 				JPanel slot = new JPanel(new BorderLayout());
 				slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-				slot.setPreferredSize(new Dimension(32, 32));
+				slot.setPreferredSize(new Dimension(40, 40));
 				slot.add(itemLabel, BorderLayout.CENTER);
 				lootGrid.add(slot);
 			}
@@ -1122,6 +1122,8 @@ public class BossTrackerPanel extends PluginPanel
 		if (entries.isEmpty())
 		{
 			JLabel emptyLabel = new JLabel("No session history yet.");
+			emptyLabel.setHorizontalAlignment(SwingConstants.CENTER);
+			emptyLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 			emptyLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
 			historyEntriesPanel.add(emptyLabel);
 		}
@@ -1160,7 +1162,7 @@ public class BossTrackerPanel extends PluginPanel
 			refreshHistoryPanel();
 		});
 
-		row.add(historyCollapseAllButton, BorderLayout.EAST);
+		row.add(historyCollapseAllButton, BorderLayout.CENTER);
 		return row;
 	}
 
@@ -1183,7 +1185,8 @@ public class BossTrackerPanel extends PluginPanel
 		JPanel headerRow = new JPanel(new BorderLayout());
 		headerRow.setOpaque(false);
 
-		JToggleButton expandButton = new JToggleButton(entry.getBossName() + " - " + entry.getKillsThisSession() + " kills");
+		JToggleButton expandButton = new JToggleButton(entry.getBossName() + " - " + entry.getKillsThisSession()
+			+ (entry.getKillsThisSession() == 1 ? " kill" : " kills"));
 		expandButton.setHorizontalAlignment(SwingConstants.LEFT);
 		expandButton.setSelected(expandedHistoryEntryIds.contains(entry.getEndedAtEpochMilli()));
 		styleButton(expandButton);
@@ -1207,7 +1210,8 @@ public class BossTrackerPanel extends PluginPanel
 		});
 
 		JPanel eastControls = new JPanel(new BorderLayout(4, 0));
-		eastControls.setOpaque(false);
+		eastControls.setOpaque(true);
+		eastControls.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		if (entry.isOnSlayerTask())
 		{
 			JLabel slayerIconLabel = new JLabel(new ImageIcon(slayerIcon));
@@ -1244,11 +1248,21 @@ public class BossTrackerPanel extends PluginPanel
 		if (!entry.getLootItemQuantities().isEmpty())
 		{
 			double totalGp = 0;
+			Map<Integer, Double> valueByItem = new LinkedHashMap<>();
 			for (Map.Entry<Integer, Integer> item : entry.getLootItemQuantities().entrySet())
 			{
-				totalGp += (double) priceCache.getPrice(item.getKey()) * item.getValue();
+				double value = (double) priceCache.getPrice(item.getKey()) * item.getValue();
+				valueByItem.put(item.getKey(), value);
+				totalGp += value;
 			}
+			List<Integer> sortedItemIds = new ArrayList<>(valueByItem.keySet());
+			sortedItemIds.sort((a, b) -> Double.compare(valueByItem.get(b), valueByItem.get(a)));
 			int kills = entry.getKillsThisSession();
+
+			JPanel lootSection = new JPanel();
+			lootSection.setLayout(new BoxLayout(lootSection, BoxLayout.Y_AXIS));
+			lootSection.setOpaque(false);
+			lootSection.setBorder(new CompoundBorder(new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49)), new EmptyBorder(8, 0, 0, 0)));
 
 			JPanel lootStatsRow = new JPanel(new GridLayout(1, 2));
 			lootStatsRow.setOpaque(false);
@@ -1260,26 +1274,28 @@ public class BossTrackerPanel extends PluginPanel
 			totalGpLabel.setHorizontalAlignment(SwingConstants.RIGHT);
 			lootStatsRow.add(gpPerKillLabel);
 			lootStatsRow.add(totalGpLabel);
-			detailPanel.add(lootStatsRow);
-			detailPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+			lootSection.add(lootStatsRow);
+			lootSection.add(Box.createRigidArea(new Dimension(0, 10)));
 
 			JPanel lootGrid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
 			lootGrid.setOpaque(false);
-			for (Map.Entry<Integer, Integer> item : entry.getLootItemQuantities().entrySet())
+			for (int itemId : sortedItemIds)
 			{
+				int quantity = entry.getLootItemQuantities().get(itemId);
 				JLabel itemLabel = new JLabel();
 				itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
-				itemLabel.setToolTipText(priceCache.getName(item.getKey()) + " x" + item.getValue());
-				itemManager.getImage(item.getKey(), item.getValue(), item.getValue() > 1).addTo(itemLabel);
+				itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, valueByItem.get(itemId)));
+				itemManager.getImage(itemId, quantity, quantity > 1).addTo(itemLabel);
 
 				JPanel slot = new JPanel(new BorderLayout());
 				slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 				slot.setBorder(new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49)));
-				slot.setPreferredSize(new Dimension(32, 32));
+				slot.setPreferredSize(new Dimension(40, 40));
 				slot.add(itemLabel, BorderLayout.CENTER);
 				lootGrid.add(slot);
 			}
-			detailPanel.add(lootGrid);
+			lootSection.add(lootGrid);
+			detailPanel.add(lootSection);
 		}
 
 		detailPanel.setVisible(expandButton.isSelected());
