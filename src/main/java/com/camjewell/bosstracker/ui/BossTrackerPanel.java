@@ -100,6 +100,7 @@ public class BossTrackerPanel extends PluginPanel
 
 	private final JLabel bossIconLabel = new JLabel();
 	private final JLabel bossNameLabel = new JLabel("No Session");
+	private final JLabel sessionSlayerIconLabel = new JLabel();
 	private final JLabel kphLabel = new JLabel(htmlLabel("KPH: ", "N/A"));
 	private final JLabel killsLabel = new JLabel(htmlLabel("Kills: ", "N/A"));
 	private final JLabel avgKillLabel = new JLabel(htmlLabel("Average Kill: ", "N/A"));
@@ -431,7 +432,16 @@ public class BossTrackerPanel extends PluginPanel
 
 		bossNameLabel.setFont(FontManager.getRunescapeBoldFont());
 
-		sessionInfoSection.add(bossNameLabel);
+		sessionSlayerIconLabel.setIcon(new ImageIcon(slayerIcon));
+		sessionSlayerIconLabel.setToolTipText("Kills this session counted toward a Slayer task");
+		sessionSlayerIconLabel.setVisible(false);
+
+		JPanel bossNameRow = new JPanel(new BorderLayout(4, 0));
+		bossNameRow.setOpaque(false);
+		bossNameRow.add(bossNameLabel, BorderLayout.WEST);
+		bossNameRow.add(sessionSlayerIconLabel, BorderLayout.CENTER);
+
+		sessionInfoSection.add(bossNameRow);
 		sessionInfoSection.add(kphLabel);
 		sessionInfoSection.add(killsLabel);
 		sessionInfoSection.add(avgKillLabel);
@@ -944,6 +954,7 @@ public class BossTrackerPanel extends PluginPanel
 			bossNameLabel.setText("No Session");
 			bossNameLabel.setForeground(ENDED_COLOR);
 			bossIconLabel.setIcon(null);
+			sessionSlayerIconLabel.setVisible(false);
 			kphLabel.setText(htmlLabel("KPH: ", "N/A"));
 			killsLabel.setText(htmlLabel("Kills: ", "N/A"));
 			avgKillLabel.setText(htmlLabel("Average Kill: ", "N/A"));
@@ -961,6 +972,7 @@ public class BossTrackerPanel extends PluginPanel
 
 		bossNameLabel.setText(display.getBoss().getBossName());
 		bossNameLabel.setForeground(session == null ? ENDED_COLOR : (session.isPaused() ? PAUSED_COLOR : ACTIVE_COLOR));
+		sessionSlayerIconLabel.setVisible(display.isOnSlayerTask());
 		itemManager.getImage(display.getBoss().getIconItemId()).addTo(bossIconLabel);
 
 		kphLabel.setText(htmlLabel("KPH: ", TimeFormat.kph(display.getKillsPerHour(), config.kphMethod())));

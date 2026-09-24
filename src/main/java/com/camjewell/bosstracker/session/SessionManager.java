@@ -265,8 +265,11 @@ public class SessionManager
 	}
 
 	/**
-	 * @return true if a Slayer task is currently active, has kills remaining, and its target
-	 * resolves (by exact name, alias, or NPC name) to this boss.
+	 * @return true if a Slayer task is currently active and this boss counts toward it.
+	 * <p>
+	 * The Slayer plugin clears the task name as soon as the assignment completes, so a non-empty
+	 * name is sufficient to prove a task is active; the remaining count is deliberately not checked,
+	 * because it can already have hit zero by the time the final kill's chat message is parsed.
 	 */
 	private boolean isOnSlayerTaskFor(Boss boss)
 	{
@@ -275,16 +278,16 @@ public class SessionManager
 			return false;
 		}
 		String task = slayerPluginService.getTask();
-		if (task == null || task.isEmpty() || slayerPluginService.getRemainingAmount() <= 0)
+		if (task == null || task.isEmpty())
 		{
 			return false;
 		}
-		Boss taskBoss = Boss.byNameOrAlias(task);
-		if (taskBoss == null)
+		boolean onTask = boss.countsForSlayerTask(task);
+		if (!onTask)
 		{
-			taskBoss = Boss.byNpcName(task);
+			log.debug("Slayer task '{}' does not credit {}", task, boss.getBossName());
 		}
-		return taskBoss == boss;
+		return onTask;
 	}
 
 	private void recalculateKph()

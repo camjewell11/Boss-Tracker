@@ -2,9 +2,11 @@ package com.camjewell.bosstracker.boss;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.Getter;
 import net.runelite.api.gameval.ItemID;
 
@@ -176,6 +178,15 @@ public enum Boss
 	private static final Map<String, Boss> BY_NPC_NAME = new HashMap<>();
 	private static final Map<String, Boss> BY_ALIAS = new HashMap<>();
 
+	/**
+	 * Slayer task name (as the Slayer plugin reports it) to every tracked boss whose kills count
+	 * toward that task. Deliberately not derived from {@link #bossName}/{@link #aliases}: a task's
+	 * name frequently differs from the boss it credits ("Hellhounds" credits Cerberus, "Hydras"
+	 * credits the Alchemical Hydra), and one task can credit several bosses ("Spiders" credits
+	 * Sarachnis, Venenatis, Spindel and Araxxor).
+	 */
+	private static final Map<String, Set<Boss>> BY_SLAYER_TASK = new HashMap<>();
+
 	static
 	{
 		for (Boss boss : values())
@@ -190,6 +201,91 @@ public enum Boss
 				BY_ALIAS.put(alias.toLowerCase(), boss);
 			}
 		}
+
+		// Boss tasks: the assignment names the boss directly.
+		slayerTask("The Phantom Muspah", PHANTOM_MUSPAH);
+		slayerTask("Zulrah", ZULRAH);
+		slayerTask("Araxxor", ARAXXOR);
+		slayerTask("The Shellbane Gryphon", SHELLBANE_GRYPHON);
+		slayerTask("The Maggot King", MAGGOT_KING);
+		slayerTask("Duke Sucellus", DUKE_SUCELLUS);
+		slayerTask("Vardorvis", VARDORVIS);
+		slayerTask("The Whisperer", WHISPERER);
+		slayerTask("The Leviathan", LEVIATHAN);
+		slayerTask("Vorkath", VORKATH);
+		slayerTask("The Alchemical Hydra", ALCHEMICAL_HYDRA);
+		slayerTask("The Grotesque Guardians", GROTESQUE_GUARDIANS);
+		slayerTask("TzTok-Jad", TZTOK_JAD);
+		slayerTask("TzKal-Zuk", TZKAL_ZUK);
+		slayerTask("The Giant Mole", GIANT_MOLE);
+		slayerTask("Sarachnis", SARACHNIS);
+		slayerTask("The Abyssal Sire", ABYSSAL_SIRE);
+		slayerTask("Commander Zilyana", COMMANDER_ZILYANA);
+		slayerTask("General Graardor", GENERAL_GRAARDOR);
+		slayerTask("Kree'arra", KREEARRA);
+		slayerTask("K'ril Tsutsaroth", KRIL_TSUTSAROTH);
+		slayerTask("The Cave Kraken Boss", KRAKEN);
+		slayerTask("The Thermonuclear Smoke Devil", THERMY);
+		slayerTask("Cerberus", CERBERUS);
+		slayerTask("The King Black Dragon", KING_BLACK_DRAGON);
+		slayerTask("Scorpia", SCORPIA);
+		slayerTask("The Chaos Fanatic", CHAOS_FANATIC);
+		slayerTask("Crazy Archaeologists", CRAZY_ARCHAEOLOGIST);
+		slayerTask("The Chaos Elemental", CHAOS_ELEMENTAL);
+		slayerTask("Callisto", CALLISTO, ARTIO);
+		slayerTask("Vet'ion", VETION, CALVARION);
+		slayerTask("Venenatis", VENENATIS, SPINDEL);
+		slayerTask("Barrows Brothers", BARROWS);
+		slayerTask("Deranged Archaeologist", DERANGED_ARCHAEOLOGIST);
+		slayerTask("The Kalphite Queen", KALPHITE_QUEEN);
+		slayerTask("Dagannoth Kings", DAGANNOTH_KINGS, DAGANNOTH_PRIME, DAGANNOTH_REX, DAGANNOTH_SUPREME);
+
+		// Regular tasks that the boss also counts toward.
+		slayerTask("Hellhounds", CERBERUS);
+		slayerTask("Hydras", ALCHEMICAL_HYDRA);
+		slayerTask("Gargoyles", GROTESQUE_GUARDIANS);
+		slayerTask("Abyssal demons", ABYSSAL_SIRE);
+		slayerTask("Cave kraken", KRAKEN);
+		slayerTask("Smoke devils", THERMY);
+		slayerTask("Black dragons", KING_BLACK_DRAGON);
+		slayerTask("Blue dragons", VORKATH);
+		slayerTask("Zombies", VORKATH);
+		slayerTask("Aviansies", KREEARRA);
+		slayerTask("Greater demons", KRIL_TSUTSAROTH);
+		slayerTask("Kalphites", KALPHITE_QUEEN);
+		slayerTask("Dagannoth", DAGANNOTH_KINGS, DAGANNOTH_PRIME, DAGANNOTH_REX, DAGANNOTH_SUPREME);
+		slayerTask("Scorpions", SCORPIA);
+		slayerTask("Bears", CALLISTO, ARTIO);
+		slayerTask("Skeletons", VETION, CALVARION);
+		slayerTask("Spiders", SARACHNIS, VENENATIS, SPINDEL, ARAXXOR);
+		slayerTask("Araxytes", ARAXXOR);
+		slayerTask("Rats", SCURRIUS);
+		slayerTask("Cows", BRUTUS);
+		slayerTask("Gryphons", SHELLBANE_GRYPHON);
+		slayerTask("Lesser Nagua", AMOXLIATL);
+		slayerTask("Tzhaar", TZTOK_JAD, TZKAL_ZUK);
+		slayerTask("Fire giants", ROYAL_TITANS);
+		slayerTask("Ice giants", ROYAL_TITANS);
+	}
+
+	private static void slayerTask(String taskName, Boss... bosses)
+	{
+		BY_SLAYER_TASK.computeIfAbsent(taskName.toLowerCase(), k -> EnumSet.noneOf(Boss.class))
+			.addAll(Arrays.asList(bosses));
+	}
+
+	/**
+	 * @return true if killing this boss makes progress on a Slayer task with this name. Matching is
+	 * case-insensitive; an unrecognized or null task name returns false.
+	 */
+	public boolean countsForSlayerTask(String taskName)
+	{
+		if (taskName == null || taskName.isEmpty())
+		{
+			return false;
+		}
+		Set<Boss> bosses = BY_SLAYER_TASK.get(taskName.toLowerCase());
+		return bosses != null && bosses.contains(this);
 	}
 
 	/**
