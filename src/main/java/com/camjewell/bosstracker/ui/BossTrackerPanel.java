@@ -172,6 +172,7 @@ public class BossTrackerPanel extends PluginPanel
 	private final JButton historyCollapseAllButton = new JButton("Collapse All");
 	private final JPanel searchViewPanel = new JPanel();
 	private int lastRenderedHistoryVersion = -1;
+	private int lastRenderedHistoryHighlight;
 	private int lastRenderedLookupVersion = -1;
 
 	/**
@@ -862,13 +863,27 @@ public class BossTrackerPanel extends PluginPanel
 
 	private static void styleButton(AbstractButton button)
 	{
+		styleButton(button, Color.WHITE);
+	}
+
+	/**
+	 * {@code selectedForeground} has to be restated in the FlatLaf style, or the button reverts to
+	 * white text the moment it is toggled on, dropping any per-row color while the row is expanded.
+	 */
+	private static void styleButton(AbstractButton button, Color foreground)
+	{
 		button.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		button.setForeground(Color.WHITE);
+		button.setForeground(foreground);
 		button.setFocusPainted(false);
 		button.putClientProperty("FlatLaf.style",
 			"borderColor: #282828; focusedBorderColor: #282828; hoverBackground: #333333; "
-				+ "selectedBackground: #4d4d4d; selectedForeground: #ffffff; "
+				+ "selectedBackground: #4d4d4d; selectedForeground: " + toHexColor(foreground) + "; "
 				+ "focusWidth: 0; innerFocusWidth: 0;");
+	}
+
+	private static String toHexColor(Color color)
+	{
+		return String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
 	}
 
 	/**
@@ -1121,13 +1136,100 @@ public class BossTrackerPanel extends PluginPanel
 		return resultPanel;
 	}
 
+	private static final int HISTORY_VALUE_TIERS = 5;
+
+	/**
+	 * @return the color of the highest-value tier this session's loot total reaches, or null when
+	 * highlighting is off or the total falls short of every tier. Tiers are compared by threshold
+	 * rather than by index, so out-of-order thresholds still resolve to the highest one met.
+	 */
+	private Color historyValueColor(double totalGp)
+	{
+		if (!config.highlightHistoryByValue())
+		{
+			return null;
+		}
+
+		Color color = null;
+		long highestMet = Long.MIN_VALUE;
+		for (int tier = 1; tier <= HISTORY_VALUE_TIERS; tier++)
+		{
+			long threshold = historyTierValue(tier);
+			if (totalGp >= threshold && threshold > highestMet)
+			{
+				highestMet = threshold;
+				color = historyTierColor(tier);
+			}
+		}
+		return color;
+	}
+
+	private int historyTierValue(int tier)
+	{
+		switch (tier)
+		{
+			case 1:
+				return config.historyTier1Value();
+			case 2:
+				return config.historyTier2Value();
+			case 3:
+				return config.historyTier3Value();
+			case 4:
+				return config.historyTier4Value();
+			default:
+				return config.historyTier5Value();
+		}
+	}
+
+	private Color historyTierColor(int tier)
+	{
+		switch (tier)
+		{
+			case 1:
+				return config.historyTier1Color();
+			case 2:
+				return config.historyTier2Color();
+			case 3:
+				return config.historyTier3Color();
+			case 4:
+				return config.historyTier4Color();
+			default:
+				return config.historyTier5Color();
+		}
+	}
+
+	/**
+	 * Cheap change-detector for the highlight settings, so the history rows rebuild when any of
+	 * them is edited without rebuilding on every tick.
+	 */
+	private int historyHighlightSignature()
+	{
+		if (!config.highlightHistoryByValue())
+		{
+			return 0;
+		}
+
+		int signature = 1;
+		for (int tier = 1; tier <= HISTORY_VALUE_TIERS; tier++)
+		{
+			signature = 31 * signature + historyTierValue(tier);
+			signature = 31 * signature + historyTierColor(tier).getRGB();
+		}
+		return signature;
+	}
+
 	private void refreshHistoryPanel()
 	{
-		if (historyManager.getVersion() == lastRenderedHistoryVersion)
+		// The entry list itself is unchanged when only the highlight settings are edited, so the
+		// version check alone would leave the rows showing their old colors until the next reload.
+		int highlightSignature = historyHighlightSignature();
+		if (historyManager.getVersion() == lastRenderedHistoryVersion
+			&& highlightSignature == lastRenderedHistoryHighlight)
 		{
 			return;
 		}
 		lastRenderedHistoryVersion = historyManager.getVersion();
+		lastRenderedHistoryHighlight = highlightSignature;
 
 		historyEntriesPanel.removeAll();
 		List<SessionHistoryEntry> entries = historyManager.getEntries();
@@ -1197,11 +1299,22 @@ public class BossTrackerPanel extends PluginPanel
 		JPanel headerRow = new JPanel(new BorderLayout());
 		headerRow.setOpaque(false);
 
+		Map<Integer, Double> valueByItem = new LinkedHashMap<>();
+		double totalGp = 0;
+		for (Map.Entry<Integer, Integer> item : entry.getLootItemQuantities().entrySet())
+		{
+			double value = (double) priceCache.getPrice(item.getKey()) * item.getValue();
+			valueByItem.put(item.getKey(), value);
+			totalGp += value;
+		}
+
 		JToggleButton expandButton = new JToggleButton(entry.getBossName() + " - " + entry.getKillsThisSession()
 			+ (entry.getKillsThisSession() == 1 ? " kill" : " kills"));
 		expandButton.setHorizontalAlignment(SwingConstants.LEFT);
 		expandButton.setSelected(expandedHistoryEntryIds.contains(entry.getEndedAtEpochMilli()));
-		styleButton(expandButton);
+
+		Color valueColor = historyValueColor(totalGp);
+		styleButton(expandButton, valueColor != null ? valueColor : Color.WHITE);
 
 		JButton deleteButton = new JButton("✕");
 		deleteButton.setToolTipText("Delete this session");
@@ -1259,14 +1372,6 @@ public class BossTrackerPanel extends PluginPanel
 
 		if (!entry.getLootItemQuantities().isEmpty())
 		{
-			double totalGp = 0;
-			Map<Integer, Double> valueByItem = new LinkedHashMap<>();
-			for (Map.Entry<Integer, Integer> item : entry.getLootItemQuantities().entrySet())
-			{
-				double value = (double) priceCache.getPrice(item.getKey()) * item.getValue();
-				valueByItem.put(item.getKey(), value);
-				totalGp += value;
-			}
 			List<Integer> sortedItemIds = new ArrayList<>(valueByItem.keySet());
 			sortedItemIds.sort((a, b) -> Double.compare(valueByItem.get(b), valueByItem.get(a)));
 			int kills = entry.getKillsThisSession();

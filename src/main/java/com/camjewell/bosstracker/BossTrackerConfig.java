@@ -1,5 +1,7 @@
 package com.camjewell.bosstracker;
 
+import java.awt.Color;
+import net.runelite.client.config.Alpha;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
@@ -12,6 +14,7 @@ public interface BossTrackerConfig extends Config
 	String GENERAL_SECTION = "General Settings";
 	String GOALS_SECTION = "Boss Goals";
 	String LOOT_SECTION = "Loot Display";
+	String HISTORY_SECTION = "History Highlight";
 
 	@ConfigSection(
 		name = "Display Options",
@@ -44,6 +47,14 @@ public interface BossTrackerConfig extends Config
 		closedByDefault = true
 	)
 	String lootSection = LOOT_SECTION;
+
+	@ConfigSection(
+		name = "History Highlight",
+		description = "Colors past session rows by how much loot they were worth",
+		position = 4,
+		closedByDefault = true
+	)
+	String historySection = HISTORY_SECTION;
 
 	// ---- Display Options ----
 
@@ -367,5 +378,144 @@ public interface BossTrackerConfig extends Config
 	default LootDisplayMode lootDisplayMode()
 	{
 		return LootDisplayMode.SESSION;
+	}
+
+	// ---- History Highlight ----
+
+	@ConfigItem(
+		position = 0,
+		keyName = "highlightHistoryByValue",
+		name = "Color By Value",
+		description = "Colors each past session's row by the total GP value of the loot it recorded",
+		section = historySection
+	)
+	default boolean highlightHistoryByValue()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		position = 1,
+		keyName = "historyTier1Value",
+		name = "Tier 1 Value",
+		description = "A session worth at least this much GP uses the tier 1 color",
+		section = historySection
+	)
+	default int historyTier1Value()
+	{
+		return 3000000;
+	}
+
+	@Alpha
+	@ConfigItem(
+		position = 2,
+		keyName = "historyTier1Color",
+		name = "Tier 1 Color",
+		description = "Row color for sessions that reach the tier 1 value (default green)",
+		section = historySection
+	)
+	default Color historyTier1Color()
+	{
+		return new Color(0x2ECC40);
+	}
+
+	@ConfigItem(
+		position = 3,
+		keyName = "historyTier2Value",
+		name = "Tier 2 Value",
+		description = "A session worth at least this much GP uses the tier 2 color",
+		section = historySection
+	)
+	default int historyTier2Value()
+	{
+		return 10000000;
+	}
+
+	@Alpha
+	@ConfigItem(
+		position = 4,
+		keyName = "historyTier2Color",
+		name = "Tier 2 Color",
+		description = "Row color for sessions that reach the tier 2 value (default yellow-green)",
+		section = historySection
+	)
+	default Color historyTier2Color()
+	{
+		return new Color(0x9ACD32);
+	}
+
+	@ConfigItem(
+		position = 5,
+		keyName = "historyTier3Value",
+		name = "Tier 3 Value",
+		description = "A session worth at least this much GP uses the tier 3 color",
+		section = historySection
+	)
+	default int historyTier3Value()
+	{
+		return 25000000;
+	}
+
+	@Alpha
+	@ConfigItem(
+		position = 6,
+		keyName = "historyTier3Color",
+		name = "Tier 3 Color",
+		description = "Row color for sessions that reach the tier 3 value (default yellow)",
+		section = historySection
+	)
+	default Color historyTier3Color()
+	{
+		return new Color(0xFFDC00);
+	}
+
+	@ConfigItem(
+		position = 7,
+		keyName = "historyTier4Value",
+		name = "Tier 4 Value",
+		description = "A session worth at least this much GP uses the tier 4 color",
+		section = historySection
+	)
+	default int historyTier4Value()
+	{
+		return 50000000;
+	}
+
+	@Alpha
+	@ConfigItem(
+		position = 8,
+		keyName = "historyTier4Color",
+		name = "Tier 4 Color",
+		description = "Row color for sessions that reach the tier 4 value (default orange)",
+		section = historySection
+	)
+	default Color historyTier4Color()
+	{
+		return new Color(0xFF851B);
+	}
+
+	@ConfigItem(
+		position = 9,
+		keyName = "historyTier5Value",
+		name = "Tier 5 Value",
+		description = "A session worth at least this much GP uses the tier 5 color",
+		section = historySection
+	)
+	default int historyTier5Value()
+	{
+		return 100000000;
+	}
+
+	@Alpha
+	@ConfigItem(
+		position = 10,
+		keyName = "historyTier5Color",
+		name = "Tier 5 Color",
+		description = "Row color for sessions that reach the tier 5 value (default red)",
+		section = historySection
+	)
+	default Color historyTier5Color()
+	{
+		return new Color(0xFF4136);
 	}
 }
