@@ -837,9 +837,18 @@ public class BossTrackerPanel extends PluginPanel
 
 	private String buildLootTooltip(int itemId, int quantity, double totalValue)
 	{
-		String name = priceCache.getName(itemId);
-		return "<html>" + name + " x " + quantity + "<br>GP/Item: " + formatGp(priceCache.getPrice(itemId))
-			+ "<br>Value: " + formatGp(totalValue) + "</html>";
+		StringBuilder tooltip = new StringBuilder("<html>")
+			.append(priceCache.getName(itemId)).append(" x ").append(quantity)
+			.append("<br>GP/Item: ").append(formatGp(priceCache.getPrice(itemId)))
+			.append("<br>Value: ").append(formatGp(totalValue));
+
+		long haPrice = priceCache.getHaPrice(itemId);
+		if (haPrice > 0)
+		{
+			tooltip.append("<br>High Alch: ").append(formatGp(haPrice))
+				.append(" ea (").append(formatGp((double) haPrice * quantity)).append(')');
+		}
+		return tooltip.append("</html>").toString();
 	}
 
 	private static String formatGp(double value)
@@ -1118,7 +1127,8 @@ public class BossTrackerPanel extends PluginPanel
 			{
 				JLabel itemLabel = new JLabel();
 				itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
-				itemLabel.setToolTipText(priceCache.getName(item.getKey()) + " x" + item.getValue());
+				itemLabel.setToolTipText(buildLootTooltip(item.getKey(), item.getValue(),
+					(double) priceCache.getPrice(item.getKey()) * item.getValue()));
 				itemManager.getImage(item.getKey(), item.getValue(), item.getValue() > 1).addTo(itemLabel);
 
 				JPanel slot = new JPanel(new BorderLayout());

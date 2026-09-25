@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import net.runelite.api.ItemComposition;
 import net.runelite.client.game.ItemManager;
 
 /**
@@ -21,6 +22,7 @@ public class ItemPriceCache
 	private ItemManager itemManager;
 
 	private final Map<Integer, Long> prices = new ConcurrentHashMap<>();
+	private final Map<Integer, Long> haPrices = new ConcurrentHashMap<>();
 	private final Map<Integer, String> names = new ConcurrentHashMap<>();
 
 	/**
@@ -29,7 +31,11 @@ public class ItemPriceCache
 	public void warm(int itemId)
 	{
 		prices.put(itemId, (long) itemManager.getItemPrice(itemId));
-		names.put(itemId, itemManager.getItemComposition(itemId).getName());
+
+		// One composition lookup covers both; it is the expensive, client-thread-only part.
+		ItemComposition composition = itemManager.getItemComposition(itemId);
+		names.put(itemId, composition.getName());
+		haPrices.put(itemId, (long) composition.getHaPrice());
 	}
 
 	public long getPrice(int itemId)
@@ -40,5 +46,14 @@ public class ItemPriceCache
 	public String getName(int itemId)
 	{
 		return names.getOrDefault(itemId, "Unknown item");
+	}
+
+	/**
+	 * @return the item's high alchemy value, or 0 if unknown. Every item carries one, but not
+	 * every item can actually be alched, so callers should treat 0 as "don't show it".
+	 */
+	public long getHaPrice(int itemId)
+	{
+		return haPrices.getOrDefault(itemId, 0L);
 	}
 }
