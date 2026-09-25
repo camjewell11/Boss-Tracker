@@ -11,6 +11,7 @@ import com.camjewell.bosstracker.session.BossGoal;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.CalcMode;
 import com.camjewell.bosstracker.session.GoalManager;
+import com.camjewell.bosstracker.util.GpValue;
 import com.camjewell.bosstracker.util.ItemPriceCache;
 import com.camjewell.bosstracker.session.SessionManager;
 import com.camjewell.bosstracker.util.TimeFormat;
@@ -1154,8 +1155,8 @@ public class BossTrackerPanel extends PluginPanel
 		long highestMet = Long.MIN_VALUE;
 		for (int tier = 1; tier <= HISTORY_VALUE_TIERS; tier++)
 		{
-			long threshold = historyTierValue(tier);
-			if (totalGp >= threshold && threshold > highestMet)
+			long threshold = GpValue.parse(historyTierValue(tier));
+			if (threshold != GpValue.INVALID && totalGp >= threshold && threshold > highestMet)
 			{
 				highestMet = threshold;
 				color = historyTierColor(tier);
@@ -1164,7 +1165,7 @@ public class BossTrackerPanel extends PluginPanel
 		return color;
 	}
 
-	private int historyTierValue(int tier)
+	private String historyTierValue(int tier)
 	{
 		switch (tier)
 		{
@@ -1212,7 +1213,7 @@ public class BossTrackerPanel extends PluginPanel
 		int signature = 1;
 		for (int tier = 1; tier <= HISTORY_VALUE_TIERS; tier++)
 		{
-			signature = 31 * signature + historyTierValue(tier);
+			signature = 31 * signature + historyTierValue(tier).hashCode();
 			signature = 31 * signature + historyTierColor(tier).getRGB();
 		}
 		return signature;

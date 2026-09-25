@@ -398,12 +398,12 @@ public interface BossTrackerConfig extends Config
 		position = 1,
 		keyName = "historyTier1Value",
 		name = "Tier 1 Value",
-		description = "A session worth at least this much GP uses the tier 1 color",
+		description = "A session worth at least this much GP uses the tier 1 color. Accepts 3m, 1.5m, 3,000,000 or 3000000",
 		section = historySection
 	)
-	default int historyTier1Value()
+	default String historyTier1Value()
 	{
-		return 3000000;
+		return "3m";
 	}
 
 	@Alpha
@@ -423,12 +423,12 @@ public interface BossTrackerConfig extends Config
 		position = 3,
 		keyName = "historyTier2Value",
 		name = "Tier 2 Value",
-		description = "A session worth at least this much GP uses the tier 2 color",
+		description = "A session worth at least this much GP uses the tier 2 color. Accepts 3m, 1.5m, 3,000,000 or 3000000",
 		section = historySection
 	)
-	default int historyTier2Value()
+	default String historyTier2Value()
 	{
-		return 10000000;
+		return "10m";
 	}
 
 	@Alpha
@@ -448,12 +448,12 @@ public interface BossTrackerConfig extends Config
 		position = 5,
 		keyName = "historyTier3Value",
 		name = "Tier 3 Value",
-		description = "A session worth at least this much GP uses the tier 3 color",
+		description = "A session worth at least this much GP uses the tier 3 color. Accepts 3m, 1.5m, 3,000,000 or 3000000",
 		section = historySection
 	)
-	default int historyTier3Value()
+	default String historyTier3Value()
 	{
-		return 25000000;
+		return "25m";
 	}
 
 	@Alpha
@@ -473,12 +473,12 @@ public interface BossTrackerConfig extends Config
 		position = 7,
 		keyName = "historyTier4Value",
 		name = "Tier 4 Value",
-		description = "A session worth at least this much GP uses the tier 4 color",
+		description = "A session worth at least this much GP uses the tier 4 color. Accepts 3m, 1.5m, 3,000,000 or 3000000",
 		section = historySection
 	)
-	default int historyTier4Value()
+	default String historyTier4Value()
 	{
-		return 50000000;
+		return "50m";
 	}
 
 	@Alpha
@@ -498,12 +498,12 @@ public interface BossTrackerConfig extends Config
 		position = 9,
 		keyName = "historyTier5Value",
 		name = "Tier 5 Value",
-		description = "A session worth at least this much GP uses the tier 5 color",
+		description = "A session worth at least this much GP uses the tier 5 color. Accepts 3m, 1.5m, 3,000,000 or 3000000",
 		section = historySection
 	)
-	default int historyTier5Value()
+	default String historyTier5Value()
 	{
-		return 100000000;
+		return "100m";
 	}
 
 	@Alpha
