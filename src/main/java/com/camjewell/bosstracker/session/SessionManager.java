@@ -315,7 +315,22 @@ public class SessionManager
 			return 0;
 		}
 		long elapsed = Duration.between(session.getSessionStart(), Instant.now()).getSeconds();
-		return (int) elapsed + session.getTimerOffsetSeconds() - session.getPausedSeconds();
+		return (int) elapsed + session.getTimerOffsetSeconds() - totalPausedSeconds();
+	}
+
+	/**
+	 * Completed pauses plus the one currently in progress, if any. {@code pausedSeconds} is only
+	 * banked by {@link #resume()}, so counting it alone leaves the live timer running throughout a
+	 * pause and then snapping backwards on resume.
+	 */
+	private int totalPausedSeconds()
+	{
+		int paused = session.getPausedSeconds();
+		if (session.isPaused() && session.getPauseStart() != null)
+		{
+			paused += (int) Duration.between(session.getPauseStart(), Instant.now()).getSeconds();
+		}
+		return paused;
 	}
 
 	public void toggleCalcMode()
