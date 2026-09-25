@@ -11,6 +11,12 @@ import java.util.Map;
  * Resolves whether a {@code LootReceived} event's name belongs to a given tracked {@link Boss}.
  * Group-content encounters (raids, Gauntlet, Nightmare) report loot under an "event name" that
  * differs from any {@code Boss}'s own display/NPC name, so those need an explicit alias here.
+ *
+ * <p>Multi-NPC encounters need one too whenever the NPC that actually dies is named differently
+ * from the boss: RuneLite posts NPC loot under {@code Text.removeTags(npc.getName())}, so the
+ * Grotesque Guardians drop as "Dusk", not as "Grotesque Guardians". Kill tracking is unaffected
+ * (it reads the kill-count chat message), which makes this fail quietly - kills accrue while the
+ * loot silently goes nowhere.
  * Ambiguous cases (e.g. normal vs. Challenge Mode Chambers, both reported as
  * "Chambers of Xeric") are resolved by checking against whichever {@code Boss} the current
  * session is already tracking, rather than by picking one canonical owner up front.
@@ -47,6 +53,7 @@ public final class LootBossMatcher
 		LOOT_ALIASES.put(Boss.PHOSANIS_NIGHTMARE, Collections.singletonList("The Nightmare"));
 		LOOT_ALIASES.put(Boss.ROYAL_TITANS, Arrays.asList("Branda the Fire Queen", "Eldric the Ice King"));
 		LOOT_ALIASES.put(Boss.COLOSSEUM, Collections.singletonList("Fortis Colosseum"));
+		LOOT_ALIASES.put(Boss.GROTESQUE_GUARDIANS, Arrays.asList("Dusk", "Dawn"));
 	}
 
 	private LootBossMatcher()
