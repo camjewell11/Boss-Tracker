@@ -58,6 +58,11 @@ public class LootTracker
 	@Getter
 	private final Set<Integer> ignoredItemIds = new HashSet<>();
 
+	/**
+	 * The boss's all-time tracked-kill count, used as the denominator for all-time GP/kill. Loot
+	 * is only recorded while a session is tracking that boss, which is exactly when kills are
+	 * timed, so this covers the same kills that produced the loot.
+	 */
 	@Getter
 	private int lifetimeKillsTracked;
 
@@ -172,6 +177,7 @@ public class LootTracker
 			// event) so the panel's later EDT-side reads don't need ItemManager at all.
 			priceCache.warm(stack.getId());
 		}
+
 		version++;
 
 		goalManager.onLootValueChanged(sessionBoss, computeLifetimeGp());

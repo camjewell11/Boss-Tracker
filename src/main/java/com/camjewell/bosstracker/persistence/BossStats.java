@@ -34,5 +34,4 @@ public class BossStats
 	/**
 	 * Kills counted while loot tracking was active (Phase 3), used to compute GP/kill.
 	 */
-	private int lootKillsTracked;
 }

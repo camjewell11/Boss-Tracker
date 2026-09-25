@@ -1103,8 +1103,12 @@ public class BossTrackerPanel extends PluginPanel
 				totalGp += (double) priceCache.getPrice(entry.getKey()) * entry.getValue();
 			}
 
-			int lootKills = Math.max(stats.getLootKillsTracked(), 1);
-			JLabel gpPerKillLabel = new JLabel(htmlLabel("GP/Kill: ", formatGp(totalGp / lootKills)));
+			// Was Math.max(lootKillsTracked, 1), which silently relabelled the total as a
+			// per-kill figure whenever that counter was unset - which was always, as nothing
+			// ever wrote it. killsTracked is the real count and is already on disk.
+			int kills = stats.getKillsTracked();
+			JLabel gpPerKillLabel = new JLabel(htmlLabel("GP/Kill: ",
+				kills > 0 ? formatGp(totalGp / kills) : "N/A"));
 			JLabel totalGpLabel = new JLabel(htmlLabel("Total GP: ", formatGp(totalGp)));
 			detailPanel.add(createStatsPanel(gpPerKillLabel, totalGpLabel));
 
