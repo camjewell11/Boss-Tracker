@@ -35,6 +35,12 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 tasks.register('run', JavaExec) {
+	// Match the JRE the RuneLite launcher bundles (Java 11). On 17+, strong encapsulation
+	// breaks client internals that reach into java.base (e.g. Client.getSocketFD), which
+	// silently disables plugins such as Ping Graph in the dev client only.
+	javaLauncher = javaToolchains.launcherFor {
+		languageVersion = JavaLanguageVersion.of(11)
+	}
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = pluginMainClass
 
