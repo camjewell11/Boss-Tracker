@@ -1,6 +1,8 @@
 package com.camjewell.bosstracker.persistence;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -25,4 +27,10 @@ public class SessionHistoryEntry
 	private int idleSeconds;
 	private boolean onSlayerTask;
 	private Map<Integer, Integer> lootItemQuantities = new LinkedHashMap<>();
+
+	/**
+	 * Oldest first. Empty for entries saved before trips were tracked (Gson leaves the default in
+	 * place when the key is missing) and for raids and other single-run encounters.
+	 */
+	private List<Trip> trips = new ArrayList<>();
 }

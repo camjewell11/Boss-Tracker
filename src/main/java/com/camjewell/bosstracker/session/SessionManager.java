@@ -15,6 +15,7 @@ import com.camjewell.bosstracker.persistence.TripEndReason;
 import com.camjewell.bosstracker.util.TimeFormat;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.concurrent.Executor;
@@ -794,6 +795,8 @@ public class SessionManager
 		entry.setIdleSeconds(endedSession.getIdleSeconds());
 		entry.setOnSlayerTask(endedSession.isOnSlayerTask());
 		entry.setLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionLoot()));
+		// Every trip is closed by now: each path that ends a session closes the open trip first.
+		entry.setTrips(new ArrayList<>(endedSession.getTrips()));
 		return entry;
 	}
 }

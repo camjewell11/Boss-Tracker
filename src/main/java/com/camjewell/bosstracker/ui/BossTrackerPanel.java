@@ -8,6 +8,7 @@ import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
 import com.camjewell.bosstracker.persistence.Trip;
+import com.camjewell.bosstracker.persistence.TripEndReason;
 import com.camjewell.bosstracker.session.BossGoal;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.CalcMode;
@@ -40,6 +41,7 @@ import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
@@ -1437,6 +1439,12 @@ public class BossTrackerPanel extends PluginPanel
 		detailPanel.add(createStatsPanel(kphStatLabel, sessionTimeStatLabel, avgKillStatLabel, fastestKillStatLabel, idleTimeStatLabel));
 		detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
 
+		if (entry.getTrips() != null && !entry.getTrips().isEmpty())
+		{
+			detailPanel.add(buildTripsSection(entry.getTrips()));
+			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+		}
+
 		if (!entry.getLootItemQuantities().isEmpty())
 		{
 			List<Integer> sortedItemIds = new ArrayList<>(valueByItem.keySet());
@@ -1502,6 +1510,99 @@ public class BossTrackerPanel extends PluginPanel
 		entryPanel.add(headerContainer, BorderLayout.NORTH);
 		entryPanel.add(detailPanel, BorderLayout.CENTER);
 		return entryPanel;
+	}
+
+	/**
+	 * One two-line row per trip: kills and duration on top, loot value and how it ended beneath.
+	 * Per-trip loot grids are left out; nested expandable rows don't fit the panel's width.
+	 */
+	private JPanel buildTripsSection(List<Trip> trips)
+	{
+		// Fill the row's width like createStatsPanel does; at its preferred width BoxLayout would
+		// centre it and narrow its labels enough to wrap.
+		JPanel section = new JPanel()
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
+		section.setOpaque(false);
+		section.setBorder(new CompoundBorder(new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49)), new EmptyBorder(8, 0, 0, 0)));
+		// Set explicitly: left unset, a BoxLayout panel takes its alignment from its children,
+		// which are all left-aligned below. The detail panel would then line this section's left
+		// edge up with its centre-aligned siblings' centres, starting it halfway across the row.
+		section.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		// Within the section, BoxLayout positions each child by its own alignment, and JLabel
+		// defaults to centre, so every child is set left explicitly.
+		JLabel header = new JLabel(htmlLabel("Trips: ", String.valueOf(trips.size())));
+		header.setAlignmentX(Component.LEFT_ALIGNMENT);
+		section.add(header);
+
+		Component gap = Box.createRigidArea(new Dimension(0, 4));
+		((JComponent) gap).setAlignmentX(Component.LEFT_ALIGNMENT);
+		section.add(gap);
+
+		// Two plain labels per trip rather than one HTML label with a <br>, which can size itself
+		// narrower than its text and wrap.
+		for (int i = 0; i < trips.size(); i++)
+		{
+			Trip trip = trips.get(i);
+
+			JLabel summary = new JLabel(formatTripSummary(i + 1, trip));
+			summary.setFont(FontManager.getRunescapeSmallFont());
+			summary.setForeground(Color.WHITE);
+			summary.setBorder(new EmptyBorder(4, 0, 0, 0));
+			summary.setAlignmentX(Component.LEFT_ALIGNMENT);
+			section.add(summary);
+
+			JLabel outcome = new JLabel(formatTripOutcome(trip));
+			outcome.setFont(FontManager.getRunescapeSmallFont());
+			outcome.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+			outcome.setAlignmentX(Component.LEFT_ALIGNMENT);
+			section.add(outcome);
+		}
+		return section;
+	}
+
+	private static String formatTripSummary(int number, Trip trip)
+	{
+		String duration = trip.getEndedAtEpochMilli() > 0
+			? TimeFormat.minutesSeconds((int) ((trip.getEndedAtEpochMilli() - trip.getStartedAtEpochMilli()) / 1000))
+			: "?";
+		return "#" + number + " · " + trip.getKills() + (trip.getKills() == 1 ? " kill" : " kills") + " · " + duration;
+	}
+
+	private String formatTripOutcome(Trip trip)
+	{
+		double gp = 0;
+		for (Map.Entry<Integer, Integer> item : trip.getLootItemQuantities().entrySet())
+		{
+			gp += (double) priceCache.getPrice(item.getKey()) * item.getValue();
+		}
+		return formatGpAbbreviated(gp) + " · " + describeEndReason(trip.getEndReason());
+	}
+
+	private static String describeEndReason(TripEndReason reason)
+	{
+		if (reason == null)
+		{
+			return "Unfinished";
+		}
+		switch (reason)
+		{
+			case DEATH:
+				return "Died";
+			case BANKED:
+				return "Banked";
+			case LEFT_AREA:
+				return "Left area";
+			default:
+				return "Session ended";
+		}
 	}
 
 	private static String htmlLabel(String key, String value)
