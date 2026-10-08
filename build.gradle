@@ -44,7 +44,11 @@ tasks.register('run', JavaExec) {
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = pluginMainClass
 
-	jvmArgs "-ea"
+	// -ea is kept so RuneLite core still flags client-thread misuse by this plugin, but
+	// assertions in RuneLite's built-in plugins are disabled: some fail on game states the
+	// release client survives (e.g. MenuEntrySwapper's assert npc != null at Ferox Enclave),
+	// and an AssertionError escapes the event bus and kills the client.
+	jvmArgs "-ea", "-da:net.runelite.client.plugins..."
 	args "--developer-mode", "--debug"
 }
 
