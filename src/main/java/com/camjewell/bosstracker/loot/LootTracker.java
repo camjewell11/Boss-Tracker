@@ -69,6 +69,9 @@ public class LootTracker
 	@Getter
 	private long lifetimeTimeActualSeconds;
 
+	/** Saved total of timed fight durations for the tracked boss, excluding idle time. */
+	private long lifetimeKillTimeSeconds;
+
 	/**
 	 * Bumped whenever session/lifetime loot or the ignore list changes, so the panel can skip
 	 * rebuilding the loot grid (and re-registering item image listeners) on every tick.
@@ -116,6 +119,7 @@ public class LootTracker
 		ignoredItemIds.clear();
 		lifetimeKillsTracked = 0;
 		lifetimeTimeActualSeconds = 0;
+		lifetimeKillTimeSeconds = 0;
 		version++;
 
 		if (asyncExecutor == null)
@@ -135,6 +139,7 @@ public class LootTracker
 				ignoredItemIds.addAll(loot.getIgnoredItemIds());
 				lifetimeKillsTracked = stats.getKillsTracked();
 				lifetimeTimeActualSeconds = stats.getTotalTimeActualSeconds();
+				lifetimeKillTimeSeconds = stats.getTotalTimeVirtualSeconds();
 
 				// ItemManager.getItemPrice()/getItemComposition() always call
 				// client.getItemDefinition() with no caching of their own, so they can only be
@@ -192,6 +197,19 @@ public class LootTracker
 			total += priceCache.getPrice(entry.getKey()) * entry.getValue();
 		}
 		return total;
+	}
+
+	/**
+	 * @return the average saved fight duration for {@code boss}, or -1 if its stats aren't loaded
+	 * (it isn't the boss being tracked, or the async load hasn't landed) or it has no timed kills.
+	 */
+	public int historicalAverageKillSeconds(Boss boss)
+	{
+		if (boss != trackedBoss || lifetimeKillsTracked <= 0 || lifetimeKillTimeSeconds <= 0)
+		{
+			return -1;
+		}
+		return (int) (lifetimeKillTimeSeconds / lifetimeKillsTracked);
 	}
 
 	public void toggleIgnored(int itemId)

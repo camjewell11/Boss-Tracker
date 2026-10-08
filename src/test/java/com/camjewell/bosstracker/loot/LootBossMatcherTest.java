@@ -19,6 +19,14 @@ public class LootBossMatcherTest
 	}
 
 	@Test
+	public void hueycoatlDropsUnderItsDefiniteArticleName()
+	{
+		// Confirmed from a live LootReceived event: name='The Hueycoatl'
+		assertTrue(LootBossMatcher.matchesLootEvent(Boss.HUEYCOATL, "The Hueycoatl"));
+		assertTrue(LootBossMatcher.matchesLootEvent(Boss.HUEYCOATL, "Hueycoatl"));
+	}
+
+	@Test
 	public void alternateNpcNamesStillMatch()
 	{
 		assertTrue(LootBossMatcher.matchesLootEvent(Boss.KRAKEN, "Kraken"));

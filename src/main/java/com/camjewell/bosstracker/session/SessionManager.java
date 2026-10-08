@@ -109,10 +109,12 @@ public class SessionManager
 
 	public void onChatMessage(String message, boolean inFightCavesOrInferno)
 	{
+		boolean resumedByThisMessage = false;
 		if (session != null && session.isPaused()
 			&& ChatKillParser.isRecognizedBossMessage(message, config.dksSelector(), inFightCavesOrInferno))
 		{
 			resume();
+			resumedByThisMessage = true;
 		}
 
 		Boss earlyStartBoss = ChatKillParser.findEarlyStartBoss(message);
@@ -128,7 +130,7 @@ public class SessionManager
 			log.debug("KC message matched boss={} killCount={} message=\"{}\"", kcBoss, killCount, message);
 			if (kcBoss.getTiming() == KillTiming.HITSPLAT)
 			{
-				finalizeHitsplatKill(kcBoss, killCount);
+				finalizeHitsplatKill(kcBoss, killCount, resumedByThisMessage);
 			}
 			else
 			{
@@ -208,17 +210,64 @@ public class SessionManager
 		}
 	}
 
-	private void finalizeHitsplatKill(Boss boss, int killCount)
+	/**
+	 * @param resumedByThisMessage true when this kill's own message auto-resumed a paused
+	 * session. The fight then ran while paused, and resume() has already cleared its start time,
+	 * so the duration is unknown rather than zero. Recording it as 0:00 would make it the fastest
+	 * kill and drag the average down, so it is estimated from the average fight time instead.
+	 */
+	private void finalizeHitsplatKill(Boss boss, int killCount, boolean resumedByThisMessage)
 	{
 		String key = clockKey(boss, currentAttackedNpcName);
 		Instant start = familyClock.peek(key);
-		int durationSeconds = start != null ? (int) Duration.between(start, Instant.now()).getSeconds() : 0;
 		familyClock.clear(key);
 		attackCount = 0;
-		finalizeKill(boss, killCount, durationSeconds);
+
+		if (start == null && resumedByThisMessage)
+		{
+			int estimate = estimateKillSeconds(boss);
+			if (estimate <= 0)
+			{
+				log.debug("Skipping untimed kill of {} (kc {}): paused, and no average to estimate from",
+					boss, killCount);
+				return;
+			}
+			log.debug("Estimating untimed kill of {} (kc {}) at {}s: it finished while paused",
+				boss, killCount, estimate);
+			finalizeKill(boss, killCount, estimate, true);
+			return;
+		}
+
+		int durationSeconds = start != null ? (int) Duration.between(start, Instant.now()).getSeconds() : 0;
+		finalizeKill(boss, killCount, durationSeconds, false);
+	}
+
+	/**
+	 * Average pure fight time for {@code boss}: this session's if it has timed kills, otherwise the
+	 * saved history. Deliberately not the session's displayed average, which in ACTUAL mode also
+	 * includes idle time.
+	 *
+	 * @return seconds, or -1 if neither source has anything to average.
+	 */
+	private int estimateKillSeconds(Boss boss)
+	{
+		if (session != null && session.getBoss() == boss && session.getKillsThisSession() > 0)
+		{
+			return session.getCumulativeKillTimeSeconds() / session.getKillsThisSession();
+		}
+		return lootTracker.historicalAverageKillSeconds(boss);
 	}
 
 	private void finalizeKill(Boss boss, int killCount, int durationSeconds)
+	{
+		finalizeKill(boss, killCount, durationSeconds, false);
+	}
+
+	/**
+	 * @param estimated the duration is an average standing in for an unknown fight time. It still
+	 * feeds the totals, which leaves the average unchanged, but never counts as a fastest kill.
+	 */
+	private void finalizeKill(Boss boss, int killCount, int durationSeconds, boolean estimated)
 	{
 		boolean bossChanged = session == null || session.getBoss() != boss;
 		if (bossChanged)
@@ -251,7 +300,10 @@ public class SessionManager
 		}
 
 		session.setCumulativeKillTimeSeconds(session.getCumulativeKillTimeSeconds() + durationSeconds);
-		session.setFastestKillSeconds(Math.min(session.getFastestKillSeconds(), durationSeconds));
+		if (!estimated)
+		{
+			session.setFastestKillSeconds(Math.min(session.getFastestKillSeconds(), durationSeconds));
+		}
 		session.setLastKillAt(Instant.now());
 		if (isOnSlayerTaskFor(boss))
 		{
@@ -261,7 +313,7 @@ public class SessionManager
 		recalculateKph();
 		maybeAnnounceKillDuration(boss, durationSeconds);
 		maybePrintKphInChat();
-		persistKill(boss, killCount, durationSeconds);
+		persistKill(boss, killCount, durationSeconds, estimated);
 	}
 
 	/**
@@ -576,7 +628,7 @@ public class SessionManager
 
 	// ---- persistence ----
 
-	private void persistKill(Boss boss, int killCount, int durationSeconds)
+	private void persistKill(Boss boss, int killCount, int durationSeconds, boolean estimated)
 	{
 		if (asyncExecutor == null)
 		{
@@ -588,7 +640,10 @@ public class SessionManager
 			BossStats stats = statsStore.load(accountHash, boss);
 			stats.setKillsTracked(stats.getKillsTracked() + 1);
 			stats.setTotalKc(killCount);
-			stats.setFastestKillSeconds(Math.min(stats.getFastestKillSeconds(), durationSeconds));
+			if (!estimated)
+			{
+				stats.setFastestKillSeconds(Math.min(stats.getFastestKillSeconds(), durationSeconds));
+			}
 			stats.setTotalTimeVirtualSeconds(stats.getTotalTimeVirtualSeconds() + durationSeconds);
 			statsStore.save(accountHash, boss, stats);
 		});

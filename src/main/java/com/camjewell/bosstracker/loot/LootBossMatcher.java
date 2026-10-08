@@ -54,6 +54,7 @@ public final class LootBossMatcher
 		LOOT_ALIASES.put(Boss.ROYAL_TITANS, Arrays.asList("Branda the Fire Queen", "Eldric the Ice King"));
 		LOOT_ALIASES.put(Boss.COLOSSEUM, Collections.singletonList("Fortis Colosseum"));
 		LOOT_ALIASES.put(Boss.GROTESQUE_GUARDIANS, Arrays.asList("Dusk", "Dawn"));
+		LOOT_ALIASES.put(Boss.HUEYCOATL, Collections.singletonList("The Hueycoatl"));
 	}
 
 	private LootBossMatcher()
