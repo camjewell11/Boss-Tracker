@@ -187,6 +187,14 @@ public enum Boss
 	 */
 	private static final Map<String, Set<Boss>> BY_SLAYER_TASK = new HashMap<>();
 
+	/**
+	 * Encounters where each completion is a single self-contained run, so "kills per trip" means
+	 * nothing: dying ends the run itself, and raids have banks inside them.
+	 */
+	private static final Set<Boss> NO_TRIPS = EnumSet.of(
+		CHAMBERS, CM_CHAMBERS, TOA_NORMAL, TOA_EXPERT, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM,
+		GAUNTLET, CORRUPTED_GAUNTLET, COLOSSEUM, TZTOK_JAD, TZKAL_ZUK);
+
 	static
 	{
 		for (Boss boss : values())
@@ -278,6 +286,14 @@ public enum Boss
 	 * @return true if killing this boss makes progress on a Slayer task with this name. Matching is
 	 * case-insensitive; an unrecognized or null task name returns false.
 	 */
+	/**
+	 * @return false for raids and single-run encounters, which are never split into trips.
+	 */
+	public boolean tracksTrips()
+	{
+		return !NO_TRIPS.contains(this);
+	}
+
 	public boolean countsForSlayerTask(String taskName)
 	{
 		if (taskName == null || taskName.isEmpty())

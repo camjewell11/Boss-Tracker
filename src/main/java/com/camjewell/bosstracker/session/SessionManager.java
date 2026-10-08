@@ -10,9 +10,12 @@ import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.BossStatsStore;
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
 import com.camjewell.bosstracker.persistence.SessionHistoryStore;
+import com.camjewell.bosstracker.persistence.Trip;
+import com.camjewell.bosstracker.persistence.TripEndReason;
 import com.camjewell.bosstracker.util.TimeFormat;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.concurrent.Executor;
 import javax.inject.Inject;
@@ -24,6 +27,7 @@ import net.runelite.api.Client;
 import net.runelite.api.NPC;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
+import net.runelite.client.game.ItemStack;
 import net.runelite.client.plugins.slayer.SlayerPluginService;
 
 /**
@@ -274,6 +278,7 @@ public class SessionManager
 		{
 			if (session != null)
 			{
+				closeOpenTrip(session, TripEndReason.SESSION_ENDED);
 				maybeAnnounceOnChange(session);
 				persistSession(session);
 				persistHistory(session);
@@ -283,6 +288,7 @@ public class SessionManager
 		}
 
 		session.setKillsThisSession(session.getKillsThisSession() + 1);
+		recordTripKill(durationSeconds);
 		session.setKillCount(killCount);
 
 		goalManager.ensureLoaded(boss);
@@ -507,6 +513,73 @@ public class SessionManager
 		familyClock.clearAll();
 	}
 
+	// ---- trips ----
+
+	/**
+	 * Adds a kill to the open trip, opening one first if the previous trip ended. The trip's start
+	 * is backdated by the kill's duration so it begins when this fight did, not when it ended.
+	 */
+	private void recordTripKill(int durationSeconds)
+	{
+		if (!session.getBoss().tracksTrips())
+		{
+			return;
+		}
+
+		Trip trip = session.getOpenTrip();
+		if (trip == null)
+		{
+			trip = new Trip(System.currentTimeMillis() - durationSeconds * 1000L);
+			session.getTrips().add(trip);
+			log.debug("Trip {} started for {}", session.getTrips().size(), session.getBoss());
+		}
+		trip.setKills(trip.getKills() + 1);
+		trip.setFightSeconds(trip.getFightSeconds() + durationSeconds);
+	}
+
+	/**
+	 * Called with loot already accepted for the session's boss, so it is credited to the trip that
+	 * produced it as well as the session. Loot arriving with no open trip (after a death or bank)
+	 * still counts for the session; it just has no trip to belong to.
+	 */
+	public void onTripLoot(Collection<ItemStack> items)
+	{
+		Trip trip = session != null ? session.getOpenTrip() : null;
+		if (trip == null)
+		{
+			return;
+		}
+		for (ItemStack stack : items)
+		{
+			trip.getLootItemQuantities().merge(stack.getId(), stack.getQuantity(), Integer::sum);
+		}
+	}
+
+	/**
+	 * Ends the open trip, if any. Repeated signals (opening the bank twice) are harmless: with no
+	 * open trip there is nothing to end, and the next kill opens a fresh one.
+	 */
+	public void endTrip(TripEndReason reason)
+	{
+		if (session != null)
+		{
+			closeOpenTrip(session, reason);
+		}
+	}
+
+	private void closeOpenTrip(BossSession target, TripEndReason reason)
+	{
+		Trip trip = target.getOpenTrip();
+		if (trip == null)
+		{
+			return;
+		}
+		trip.setEndedAtEpochMilli(System.currentTimeMillis());
+		trip.setEndReason(reason);
+		log.debug("Trip {} for {} ended ({}): {} kills", target.getTrips().size(), target.getBoss(), reason,
+			trip.getKills());
+	}
+
 	public void pause()
 	{
 		if (session != null && !session.isPaused())
@@ -536,6 +609,7 @@ public class SessionManager
 	{
 		if (session != null)
 		{
+			closeOpenTrip(session, TripEndReason.SESSION_ENDED);
 			maybeAnnounceOnChange(session);
 			persistSession(session);
 			persistHistory(session);
@@ -560,6 +634,7 @@ public class SessionManager
 		if (session != null)
 		{
 			BossSession endedSession = session;
+			closeOpenTrip(endedSession, TripEndReason.SESSION_ENDED);
 			long accountHash = client.getAccountHash();
 			writeSessionStats(accountHash, endedSession, computeFinalSessionSeconds(endedSession));
 			writeHistoryEntry(accountHash, endedSession);

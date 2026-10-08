@@ -7,6 +7,7 @@ import com.camjewell.bosstracker.lookup.BossLookupManager;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
+import com.camjewell.bosstracker.persistence.Trip;
 import com.camjewell.bosstracker.session.BossGoal;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.CalcMode;
@@ -108,6 +109,8 @@ public class BossTrackerPanel extends PluginPanel
 	private final JLabel fastestKillLabel = new JLabel(htmlLabel("Fastest Kill: ", "N/A"));
 	private final JLabel idleTimeLabel = new JLabel(htmlLabel("Idle Time: ", "N/A"));
 	private final JLabel sessionTimeLabel = new JLabel(htmlLabel("Session Time: ", "N/A"));
+	private final JLabel tripLabel = new JLabel(htmlLabel("Trip: ", "N/A"));
+	private final JLabel killsPerTripLabel = new JLabel(htmlLabel("Kills/Trip: ", "N/A"));
 
 	private final JButton pauseResumeButton = new JButton("Pause");
 	private final JButton calcModeButton = new JButton("Actual");
@@ -428,7 +431,7 @@ public class BossTrackerPanel extends PluginPanel
 		bossInfoPanel.setOpaque(false);
 		bossInfoPanel.setBorder(new EmptyBorder(0, 0, 4, 0));
 
-		JPanel sessionInfoSection = new JPanel(new GridLayout(7, 1, 0, 10));
+		JPanel sessionInfoSection = new JPanel(new GridLayout(9, 1, 0, 10));
 		sessionInfoSection.setBorder(new EmptyBorder(10, 5, 3, 0));
 		sessionInfoSection.setOpaque(false);
 
@@ -450,6 +453,8 @@ public class BossTrackerPanel extends PluginPanel
 		sessionInfoSection.add(fastestKillLabel);
 		sessionInfoSection.add(idleTimeLabel);
 		sessionInfoSection.add(sessionTimeLabel);
+		sessionInfoSection.add(tripLabel);
+		sessionInfoSection.add(killsPerTripLabel);
 
 		bossInfoPanel.add(bossIconLabel, BorderLayout.EAST);
 		bossInfoPanel.add(sessionInfoSection, BorderLayout.WEST);
@@ -986,6 +991,8 @@ public class BossTrackerPanel extends PluginPanel
 			fastestKillLabel.setText(htmlLabel("Fastest Kill: ", "N/A"));
 			idleTimeLabel.setText(htmlLabel("Idle Time: ", "N/A"));
 			sessionTimeLabel.setText(htmlLabel("Session Time: ", "N/A"));
+			tripLabel.setText(htmlLabel("Trip: ", "N/A"));
+			killsPerTripLabel.setText(htmlLabel("Kills/Trip: ", "N/A"));
 			pauseResumeButton.setText("Pause");
 			calcModeButton.setText("Actual");
 			refreshGoalsPanel(null);
@@ -1008,6 +1015,9 @@ public class BossTrackerPanel extends PluginPanel
 		sessionTimeLabel.setText(htmlLabel("Session Time: ",
 			TimeFormat.minutesSeconds(session != null ? sessionManager.computeActualElapsedSeconds() : 0)));
 
+		tripLabel.setText(htmlLabel("Trip: ", formatCurrentTrip(display)));
+		killsPerTripLabel.setText(htmlLabel("Kills/Trip: ", formatKillsPerTrip(display)));
+
 		pauseResumeButton.setText(session != null && session.isPaused() ? "Resume" : "Pause");
 		calcModeButton.setText(display.getCalcMode() == CalcMode.VIRTUAL ? "Virtual" : "Actual");
 
@@ -1015,6 +1025,48 @@ public class BossTrackerPanel extends PluginPanel
 		refreshLootPanel(display);
 		refreshHistoryPanel();
 		refreshSearchPanel();
+	}
+
+	/**
+	 * "#2 · 4 kills" while a trip is open, "Between trips" after a death or bank until the next
+	 * kill opens one, and N/A for encounters that don't have trips.
+	 */
+	private static String formatCurrentTrip(BossSession display)
+	{
+		List<Trip> trips = display.getTrips();
+		if (!display.getBoss().tracksTrips() || trips.isEmpty())
+		{
+			return "N/A";
+		}
+		Trip open = display.getOpenTrip();
+		if (open == null)
+		{
+			return "Between trips";
+		}
+		return "#" + trips.size() + " · " + open.getKills() + (open.getKills() == 1 ? " kill" : " kills");
+	}
+
+	/**
+	 * Averaged over finished trips only: the open trip is still accumulating kills, and counting
+	 * it would drag the average down every time a new one starts.
+	 */
+	private static String formatKillsPerTrip(BossSession display)
+	{
+		int finished = 0;
+		int kills = 0;
+		for (Trip trip : display.getTrips())
+		{
+			if (!trip.isOpen())
+			{
+				finished++;
+				kills += trip.getKills();
+			}
+		}
+		if (!display.getBoss().tracksTrips() || finished == 0)
+		{
+			return "N/A";
+		}
+		return String.format("%.1f (%d %s)", (double) kills / finished, finished, finished == 1 ? "trip" : "trips");
 	}
 
 	private void refreshSearchPanel()

@@ -3,6 +3,7 @@ package com.camjewell.bosstracker;
 import com.camjewell.bosstracker.boss.Boss;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.lookup.BossLookupManager;
+import com.camjewell.bosstracker.persistence.TripEndReason;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.GoalManager;
@@ -23,10 +24,13 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.NPC;
+import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.HitsplatApplied;
+import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatCommandManager;
 import net.runelite.client.config.ConfigManager;
@@ -292,8 +296,31 @@ public class BossTrackerPlugin extends Plugin
 
 		BossSession session = sessionManager.getSession();
 		Boss trackedBoss = session != null ? session.getBoss() : null;
-		lootTracker.onLootReceived(trackedBoss, event.getName(), event.getItems());
+		if (lootTracker.onLootReceived(trackedBoss, event.getName(), event.getItems()))
+		{
+			sessionManager.onTripLoot(event.getItems());
+		}
 		SwingUtilities.invokeLater(panel::refresh);
+	}
+
+	@Subscribe
+	public void onActorDeath(ActorDeath event)
+	{
+		if (event.getActor() == client.getLocalPlayer())
+		{
+			sessionManager.endTrip(TripEndReason.DEATH);
+			SwingUtilities.invokeLater(panel::refresh);
+		}
+	}
+
+	@Subscribe
+	public void onWidgetLoaded(WidgetLoaded event)
+	{
+		if (event.getGroupId() == InterfaceID.BANKMAIN || event.getGroupId() == InterfaceID.BANK_DEPOSITBOX)
+		{
+			sessionManager.endTrip(TripEndReason.BANKED);
+			SwingUtilities.invokeLater(panel::refresh);
+		}
 	}
 
 	@Subscribe

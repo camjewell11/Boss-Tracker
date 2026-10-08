@@ -162,13 +162,15 @@ public class LootTracker
 	 * Called by the plugin's {@code LootReceived} handler. {@code sessionBoss} is whichever boss
 	 * the active session is tracking (loot for any other boss/event is ignored, matching the
 	 * original plugin's behavior of only recording loot while actively tracking that boss).
+	 *
+	 * @return true if the loot belonged to {@code sessionBoss} and was recorded.
 	 */
-	public void onLootReceived(Boss sessionBoss, String lootEventName, Collection<ItemStack> items)
+	public boolean onLootReceived(Boss sessionBoss, String lootEventName, Collection<ItemStack> items)
 	{
 		if (sessionBoss == null || items == null || items.isEmpty()
 			|| !LootBossMatcher.matchesLootEvent(sessionBoss, lootEventName))
 		{
-			return;
+			return false;
 		}
 
 		ensureLoaded(sessionBoss);
@@ -187,6 +189,7 @@ public class LootTracker
 
 		goalManager.onLootValueChanged(sessionBoss, computeLifetimeGp());
 		persistLoot(sessionBoss, items);
+		return true;
 	}
 
 	private long computeLifetimeGp()

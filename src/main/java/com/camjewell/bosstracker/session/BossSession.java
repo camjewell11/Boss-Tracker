@@ -1,7 +1,10 @@
 package com.camjewell.bosstracker.session;
 
 import com.camjewell.bosstracker.boss.Boss;
+import com.camjewell.bosstracker.persistence.Trip;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -45,6 +48,23 @@ public class BossSession
 	 * later completes or changes mid-session.
 	 */
 	private boolean onSlayerTask;
+
+	/** Oldest first; the last one is still open unless a death, bank or the session ended it. */
+	private final List<Trip> trips = new ArrayList<>();
+
+	/**
+	 * @return the trip currently accumulating kills, or null if the last one has ended (or none
+	 * has started yet).
+	 */
+	public Trip getOpenTrip()
+	{
+		if (trips.isEmpty())
+		{
+			return null;
+		}
+		Trip last = trips.get(trips.size() - 1);
+		return last.isOpen() ? last : null;
+	}
 
 	public BossSession(Boss boss)
 	{
