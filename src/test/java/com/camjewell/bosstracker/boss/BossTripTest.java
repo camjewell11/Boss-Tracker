@@ -19,6 +19,21 @@ public class BossTripTest
 	}
 
 	@Test
+	public void barrowsTracksTripsButNotByArea()
+	{
+		assertTrue(Boss.BARROWS.tracksTrips());
+		assertFalse(Boss.BARROWS.endsTripOnLeavingArea());
+	}
+
+	@Test
+	public void areaDetectionFollowsTripTracking()
+	{
+		assertTrue(Boss.CERBERUS.endsTripOnLeavingArea());
+		assertFalse(Boss.CHAMBERS.endsTripOnLeavingArea());
+		assertFalse(Boss.COLOSSEUM.endsTripOnLeavingArea());
+	}
+
+	@Test
 	public void ordinaryBossesTrackTrips()
 	{
 		assertTrue(Boss.CERBERUS.tracksTrips());

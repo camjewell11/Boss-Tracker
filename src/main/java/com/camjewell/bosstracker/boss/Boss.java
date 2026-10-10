@@ -294,6 +294,16 @@ public enum Boss
 		return !NO_TRIPS.contains(this);
 	}
 
+	/**
+	 * @return whether leaving this boss's learned area ends a trip. Barrows is excluded: its kill
+	 * is the chest in the tunnels, so the crypts and hills above are never learned, and walking
+	 * between mounds would end the trip. Death and banking still end its trips.
+	 */
+	public boolean endsTripOnLeavingArea()
+	{
+		return tracksTrips() && this != BARROWS;
+	}
+
 	public boolean countsForSlayerTask(String taskName)
 	{
 		if (taskName == null || taskName.isEmpty())

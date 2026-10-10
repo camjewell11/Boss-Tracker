@@ -1,5 +1,7 @@
 package com.camjewell.bosstracker.persistence;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -32,6 +34,8 @@ public class BossStats
 	private boolean lootGoalNotified;
 
 	/**
-	 * Kills counted while loot tracking was active (Phase 3), used to compute GP/kill.
+	 * Map regions this boss has been killed in, learned by BossAreaTracker and used to end a trip
+	 * when the player leaves. Empty in stats saved before trips existed.
 	 */
+	private Set<Integer> regionIds = new LinkedHashSet<>();
 }

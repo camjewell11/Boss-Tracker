@@ -5,6 +5,7 @@ import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.lookup.BossLookupManager;
 import com.camjewell.bosstracker.persistence.TripEndReason;
 import com.camjewell.bosstracker.loot.LootTracker;
+import com.camjewell.bosstracker.session.BossAreaTracker;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.session.SessionManager;
@@ -99,6 +100,9 @@ public class BossTrackerPlugin extends Plugin
 	private LootTracker lootTracker;
 
 	@Inject
+	private BossAreaTracker areaTracker;
+
+	@Inject
 	private SessionHistoryManager historyManager;
 
 	@Inject
@@ -130,6 +134,7 @@ public class BossTrackerPlugin extends Plugin
 		sessionManager.setAsyncExecutor(executor);
 		goalManager.setAsyncExecutor(executor);
 		lootTracker.setAsyncExecutor(executor);
+		areaTracker.setAsyncExecutor(executor);
 		historyManager.setAsyncExecutor(executor);
 		lookupManager.setAsyncExecutor(executor);
 

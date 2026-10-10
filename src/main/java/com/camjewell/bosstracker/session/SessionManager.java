@@ -26,6 +26,9 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.NPC;
+import net.runelite.api.Player;
+import net.runelite.api.coords.LocalPoint;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.game.ItemStack;
@@ -61,6 +64,16 @@ public class SessionManager
 
 	@Inject
 	private SessionHistoryStore historyStore;
+
+	@Inject
+	private BossAreaTracker areaTracker;
+
+	/**
+	 * Ticks spent outside the boss's learned area during an open trip. A few are allowed so a
+	 * step outside the edge of an area, or a knockback, doesn't end the trip.
+	 */
+	private int ticksOutsideArea;
+	private static final int LEAVE_AREA_GRACE_TICKS = 10;
 
 	/**
 	 * Bound via the Slayer plugin's own module, pulled in through {@code @PluginDependency} on
@@ -479,6 +492,8 @@ public class SessionManager
 			}
 		}
 
+		checkTripArea();
+
 		ticksSinceTimeoutCheck++;
 		if (ticksSinceTimeoutCheck >= 2)
 		{
@@ -527,6 +542,12 @@ public class SessionManager
 			return;
 		}
 
+		int region = currentRegionId();
+		if (region >= 0 && session.getBoss().endsTripOnLeavingArea())
+		{
+			areaTracker.learn(session.getBoss(), region);
+		}
+
 		Trip trip = session.getOpenTrip();
 		if (trip == null)
 		{
@@ -570,6 +591,7 @@ public class SessionManager
 
 	private void closeOpenTrip(BossSession target, TripEndReason reason)
 	{
+		ticksOutsideArea = 0;
 		Trip trip = target.getOpenTrip();
 		if (trip == null)
 		{
@@ -579,6 +601,48 @@ public class SessionManager
 		trip.setEndReason(reason);
 		log.debug("Trip {} for {} ended ({}): {} kills", target.getTrips().size(), target.getBoss(), reason,
 			trip.getKills());
+	}
+
+	/**
+	 * Ends the open trip once the player has spent {@link #LEAVE_AREA_GRACE_TICKS} consecutive
+	 * ticks outside every region the boss has been killed in. Runs regardless of pause: leaving
+	 * to restock ends a trip whether or not the session timer is running.
+	 */
+	private void checkTripArea()
+	{
+		if (session == null || session.getOpenTrip() == null || !session.getBoss().endsTripOnLeavingArea())
+		{
+			ticksOutsideArea = 0;
+			return;
+		}
+
+		int region = currentRegionId();
+		if (region < 0 || areaTracker.isInsideOrUnknown(session.getBoss(), region))
+		{
+			ticksOutsideArea = 0;
+			return;
+		}
+
+		if (++ticksOutsideArea >= LEAVE_AREA_GRACE_TICKS)
+		{
+			log.debug("Left {}'s area (now in region {})", session.getBoss(), region);
+			closeOpenTrip(session, TripEndReason.LEFT_AREA);
+		}
+	}
+
+	/**
+	 * @return the region the player is standing in, translated out of any instance so instanced
+	 * fights report the real region they are a copy of, or -1 if there is no player yet.
+	 */
+	private int currentRegionId()
+	{
+		Player player = client.getLocalPlayer();
+		LocalPoint location = player != null ? player.getLocalLocation() : null;
+		if (location == null)
+		{
+			return -1;
+		}
+		return WorldPoint.fromLocalInstance(client, location).getRegionID();
 	}
 
 	public void pause()
