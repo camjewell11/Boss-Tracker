@@ -29,6 +29,7 @@ import net.runelite.api.NPC;
 import net.runelite.api.Player;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.game.ItemStack;
@@ -74,6 +75,12 @@ public class SessionManager
 	 */
 	private int ticksOutsideArea;
 	private static final int LEAVE_AREA_GRACE_TICKS = 10;
+
+	/** Last time the player was seen raiding for the session's raid; see checkSessionTimeout. */
+	private Instant lastRaidPresence;
+
+	/** Last raid-state reading, logged on change so the varbits' meanings can be confirmed. */
+	private int lastRaidStateValue = -1;
 
 	/**
 	 * Bound via the Slayer plugin's own module, pulled in through {@code @PluginDependency} on
@@ -506,13 +513,64 @@ public class SessionManager
 		}
 	}
 
+	/**
+	 * Ends the session after the configured minutes of inactivity. A raid is one "kill" every
+	 * 25-30 minutes, so counting from the last kill alone timed sessions out mid-way through the
+	 * next run. Time spent raiding is activity, not inactivity: while raiding the session can't
+	 * time out, and the clock counts from when the player stopped, if that is later than the kill.
+	 */
 	private void checkSessionTimeout()
 	{
-		long minutesSinceLastKill = Duration.between(session.getLastKillAt(), Instant.now()).toMinutes();
-		if (minutesSinceLastKill >= config.sessionTimeoutMinutes())
+		if (isRaidingFor(session.getBoss()))
+		{
+			lastRaidPresence = Instant.now();
+			return;
+		}
+
+		Instant since = session.getLastKillAt();
+		if (lastRaidPresence != null && lastRaidPresence.isAfter(since))
+		{
+			since = lastRaidPresence;
+		}
+		if (Duration.between(since, Instant.now()).toMinutes() >= config.sessionTimeoutMinutes())
 		{
 			end();
 		}
+	}
+
+	/**
+	 * @return true while the player is taking part in {@code boss}'s raid. For ToB and ToA, being
+	 * in a party counts, so regearing between runs with the same team keeps a session alive; for
+	 * CoX, which has no party varbit, only being inside the raid does. Always false for non-raids.
+	 */
+	private boolean isRaidingFor(Boss boss)
+	{
+		int varbit;
+		switch (boss)
+		{
+			case CHAMBERS:
+			case CM_CHAMBERS:
+				varbit = VarbitID.RAIDS_CLIENT_INDUNGEON;
+				break;
+			case THEATRE_OF_BLOOD:
+			case THEATRE_OF_BLOOD_HM:
+				varbit = VarbitID.TOB_CLIENT_PARTYSTATUS;
+				break;
+			case TOA_NORMAL:
+			case TOA_EXPERT:
+				varbit = VarbitID.TOA_CLIENT_PARTYSTATUS;
+				break;
+			default:
+				return false;
+		}
+
+		int value = client.getVarbitValue(varbit);
+		if (value != lastRaidStateValue)
+		{
+			log.debug("Raid state for {} changed: {} -> {}", boss, lastRaidStateValue, value);
+			lastRaidStateValue = value;
+		}
+		return value != 0;
 	}
 
 	// ---- lifecycle ----
@@ -678,6 +736,7 @@ public class SessionManager
 			maybeAnnounceOnChange(session);
 			persistSession(session);
 			persistHistory(session);
+			lastRaidPresence = null;
 			lastCompletedSession = session;
 			session = null;
 			familyClock.clearAll();
