@@ -31,7 +31,27 @@ public class BossStatsStore
 
 	public BossStats load(long accountHash, Boss boss)
 	{
-		File file = statsFile(accountHash, boss);
+		BossStats stats = read(statsFile(accountHash, boss), boss);
+		for (String legacyName : boss.getLegacyNames())
+		{
+			File legacy = statsFile(accountHash, legacyName);
+			if (!legacy.exists())
+			{
+				continue;
+			}
+			stats.mergeFrom(read(legacy, boss));
+			save(accountHash, boss, stats);
+			if (!legacy.renameTo(new File(legacy.getPath() + ".merged")))
+			{
+				log.warn("Failed to retire merged stats file {}", legacy);
+			}
+			log.info("Merged {} stats into {}", legacyName, boss.getBossName());
+		}
+		return stats;
+	}
+
+	private BossStats read(File file, Boss boss)
+	{
 		if (!file.exists())
 		{
 			return new BossStats();
@@ -76,7 +96,12 @@ public class BossStatsStore
 
 	private File statsFile(long accountHash, Boss boss)
 	{
+		return statsFile(accountHash, boss.getBossName());
+	}
+
+	private File statsFile(long accountHash, String bossName)
+	{
 		File accountDir = new File(new File(RuneLite.RUNELITE_DIR, "boss-tracker"), String.valueOf(accountHash));
-		return new File(accountDir, boss.getBossName() + ".json");
+		return new File(accountDir, bossName + ".json");
 	}
 }

@@ -2,6 +2,7 @@ package com.camjewell.bosstracker.boss;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -38,8 +39,11 @@ public enum Boss
 	TOA_NORMAL("TOA Normal", ItemID.WARDENPET_TUMEKEN, "Your completed Tombs of Amascut count is:", "toa"),
 	TOA_EXPERT("TOA Expert", ItemID.WARDENPET_ELIDINIS, "Your completed Tombs of Amascut: Expert Mode count is:"),
 	COLOSSEUM("Colosseum", ItemID.SOLHEREDITPET, "Your Sol Heredit kill count is:", "fortis colosseum", "colo"),
-	GAUNTLET("Gauntlet", ItemID.GAUNTLETPET, "Your Gauntlet completion count is:"),
-	CORRUPTED_GAUNTLET("Corrupted Gauntlet", ItemID.GAUNTLETPET_CORRUPT, "Your Corrupted Gauntlet completion count is:", "c gauntlet"),
+	// Regular and Corrupted runs share one boss so back-to-back runs of either land in one session.
+	GAUNTLET("Gauntlet", ItemID.GAUNTLETPET_CORRUPT, KillTiming.SELF_REPORTED, 0,
+		Arrays.asList("Your Gauntlet completion count is:", "Your Corrupted Gauntlet completion count is:"),
+		TimingFamily.NONE, false, null, Collections.singletonList("Gauntlet"),
+		Arrays.asList("corrupted gauntlet", "c gauntlet", "cg")),
 	THEATRE_OF_BLOOD("Theatre of Blood", ItemID.VERZIKPET, "Your completed Theatre of Blood count is:", "theatre", "tob"),
 	THEATRE_OF_BLOOD_HM("Theatre of Blood HM", ItemID.SOTETSEGPET, "Your completed Theatre of Blood: Hard Mode count is:", "theatre hm", "tob hm", "hm"),
 	VORKATH("Vorkath", ItemID.VORKATHPET, "Your Vorkath kill count is:", "vork"),
@@ -193,7 +197,13 @@ public enum Boss
 	 */
 	private static final Set<Boss> NO_TRIPS = EnumSet.of(
 		CHAMBERS, CM_CHAMBERS, TOA_NORMAL, TOA_EXPERT, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM,
-		GAUNTLET, CORRUPTED_GAUNTLET, COLOSSEUM, TZTOK_JAD, TZKAL_ZUK);
+		GAUNTLET, COLOSSEUM, TZTOK_JAD, TZKAL_ZUK);
+
+	/**
+	 * Display names a boss's data used to be saved under before bosses were merged. Their stats
+	 * and loot files are folded into the boss's own the first time they're loaded.
+	 */
+	private static final Map<Boss, List<String>> LEGACY_NAMES = new EnumMap<>(Boss.class);
 
 	static
 	{
@@ -209,6 +219,8 @@ public enum Boss
 				BY_ALIAS.put(alias.toLowerCase(), boss);
 			}
 		}
+
+		LEGACY_NAMES.put(GAUNTLET, Collections.singletonList("Corrupted Gauntlet"));
 
 		// Boss tasks: the assignment names the boss directly.
 		slayerTask("The Phantom Muspah", PHANTOM_MUSPAH);
@@ -302,6 +314,11 @@ public enum Boss
 	public boolean endsTripOnLeavingArea()
 	{
 		return tracksTrips() && this != BARROWS;
+	}
+
+	public List<String> getLegacyNames()
+	{
+		return LEGACY_NAMES.getOrDefault(this, Collections.emptyList());
 	}
 
 	public boolean countsForSlayerTask(String taskName)

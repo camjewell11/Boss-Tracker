@@ -12,7 +12,7 @@ public class BossTripTest
 		for (Boss boss : new Boss[]{
 			Boss.CHAMBERS, Boss.CM_CHAMBERS, Boss.TOA_NORMAL, Boss.TOA_EXPERT,
 			Boss.THEATRE_OF_BLOOD, Boss.THEATRE_OF_BLOOD_HM,
-			Boss.GAUNTLET, Boss.CORRUPTED_GAUNTLET, Boss.COLOSSEUM, Boss.TZTOK_JAD, Boss.TZKAL_ZUK})
+			Boss.GAUNTLET, Boss.COLOSSEUM, Boss.TZTOK_JAD, Boss.TZKAL_ZUK})
 		{
 			assertFalse(boss + " should not track trips", boss.tracksTrips());
 		}

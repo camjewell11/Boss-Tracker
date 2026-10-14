@@ -78,11 +78,10 @@ public class LootBossMatcherTest
 	}
 
 	@Test
-	public void gauntletLootComesFromTheHunllef()
+	public void gauntletLootComesFromEitherHunllef()
 	{
 		assertTrue(LootBossMatcher.matchesLootEvent(Boss.GAUNTLET, "Crystalline Hunllef"));
-		assertTrue(LootBossMatcher.matchesLootEvent(Boss.CORRUPTED_GAUNTLET, "Corrupted Hunllef"));
-		assertFalse(LootBossMatcher.matchesLootEvent(Boss.GAUNTLET, "Corrupted Hunllef"));
-		assertFalse(LootBossMatcher.matchesLootEvent(Boss.CORRUPTED_GAUNTLET, "Crystalline Hunllef"));
+		assertTrue(LootBossMatcher.matchesLootEvent(Boss.GAUNTLET, "Corrupted Hunllef"));
+		assertFalse(LootBossMatcher.matchesLootEvent(Boss.COLOSSEUM, "Corrupted Hunllef"));
 	}
 }

@@ -31,7 +31,27 @@ public class BossLootStore
 
 	public BossLoot load(long accountHash, Boss boss)
 	{
-		File file = lootFile(accountHash, boss);
+		BossLoot loot = read(lootFile(accountHash, boss), boss);
+		for (String legacyName : boss.getLegacyNames())
+		{
+			File legacy = lootFile(accountHash, legacyName);
+			if (!legacy.exists())
+			{
+				continue;
+			}
+			loot.mergeFrom(read(legacy, boss));
+			save(accountHash, boss, loot);
+			if (!legacy.renameTo(new File(legacy.getPath() + ".merged")))
+			{
+				log.warn("Failed to retire merged loot file {}", legacy);
+			}
+			log.info("Merged {} loot into {}", legacyName, boss.getBossName());
+		}
+		return loot;
+	}
+
+	private BossLoot read(File file, Boss boss)
+	{
 		if (!file.exists())
 		{
 			return new BossLoot();
@@ -76,8 +96,13 @@ public class BossLootStore
 
 	private File lootFile(long accountHash, Boss boss)
 	{
+		return lootFile(accountHash, boss.getBossName());
+	}
+
+	private File lootFile(long accountHash, String bossName)
+	{
 		File accountDir = new File(new File(RuneLite.RUNELITE_DIR, "boss-tracker"), String.valueOf(accountHash));
 		File lootDir = new File(accountDir, "loot");
-		return new File(lootDir, boss.getBossName() + ".json");
+		return new File(lootDir, bossName + ".json");
 	}
 }

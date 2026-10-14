@@ -27,4 +27,13 @@ public class BossLoot
 
 	/** One per minion drop received. */
 	private int minionKills;
+
+	/** Folds another boss's loot into this one, for bosses that were merged. */
+	public void mergeFrom(BossLoot other)
+	{
+		other.itemQuantities.forEach((id, qty) -> itemQuantities.merge(id, qty, Integer::sum));
+		ignoredItemIds.addAll(other.ignoredItemIds);
+		other.minionItemQuantities.forEach((id, qty) -> minionItemQuantities.merge(id, qty, Integer::sum));
+		minionKills += other.minionKills;
+	}
 }

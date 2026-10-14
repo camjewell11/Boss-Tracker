@@ -38,4 +38,29 @@ public class BossStats
 	 * when the player leaves. Empty in stats saved before trips existed.
 	 */
 	private Set<Integer> regionIds = new LinkedHashSet<>();
+
+	/**
+	 * Folds another boss's stats into these, for bosses that were merged. Totals add up, the
+	 * fastest kill and highest KC win, and goals are only taken over where none is set here.
+	 */
+	public void mergeFrom(BossStats other)
+	{
+		totalTimeActualSeconds += other.totalTimeActualSeconds;
+		totalTimeVirtualSeconds += other.totalTimeVirtualSeconds;
+		killsTracked += other.killsTracked;
+		fastestKillSeconds = Math.min(fastestKillSeconds, other.fastestKillSeconds);
+		totalKc = Math.max(totalKc, other.totalKc);
+		if (goalEndKc == 0)
+		{
+			goalStartKc = other.goalStartKc;
+			goalEndKc = other.goalEndKc;
+			goalNotified = other.goalNotified;
+		}
+		if (lootGoalGp == 0)
+		{
+			lootGoalGp = other.lootGoalGp;
+			lootGoalNotified = other.lootGoalNotified;
+		}
+		regionIds.addAll(other.regionIds);
+	}
 }
