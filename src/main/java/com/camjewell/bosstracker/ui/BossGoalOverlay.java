@@ -7,6 +7,7 @@ import com.camjewell.bosstracker.session.BossGoal;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.session.SessionManager;
+import com.camjewell.bosstracker.util.GpFormat;
 import com.camjewell.bosstracker.util.ItemPriceCache;
 import com.camjewell.bosstracker.util.TimeFormat;
 import java.awt.Color;
@@ -141,8 +142,8 @@ public class BossGoalOverlay extends Overlay
 		}
 		else
 		{
-			progressBarComponent.setLeftLabel(formatGp(currentGp));
-			progressBarComponent.setRightLabel(formatGp(lootGoalGp));
+			progressBarComponent.setLeftLabel(GpFormat.compact(currentGp));
+			progressBarComponent.setRightLabel(GpFormat.compact(lootGoalGp));
 		}
 
 		panelComponent.getChildren().add(iconAndLines);
@@ -159,11 +160,6 @@ public class BossGoalOverlay extends Overlay
 			total += priceCache.getPrice(entry.getKey()) * entry.getValue();
 		}
 		return total;
-	}
-
-	private static String formatGp(long value)
-	{
-		return String.format("%,d", value);
 	}
 
 	private LineComponent rowFor(GoalOverlayRow row, int killsDone, int killsLeft, boolean kcGoalSet, double ttgHours,

@@ -15,6 +15,7 @@ import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.CalcMode;
 import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.util.GpValue;
+import com.camjewell.bosstracker.util.GpFormat;
 import com.camjewell.bosstracker.util.ItemPriceCache;
 import com.camjewell.bosstracker.session.SessionManager;
 import com.camjewell.bosstracker.util.TimeFormat;
@@ -128,7 +129,7 @@ public class BossTrackerPanel extends PluginPanel
 	private final JLabel goalLootLabel = new JLabel(htmlLabel("Loot Goal: ", "N/A"));
 	private final SpinnerNumberModel goalStartKcModel = new SpinnerNumberModel(0, 0, 10_000_000, 1);
 	private final SpinnerNumberModel goalEndKcModel = new SpinnerNumberModel(0, 0, 10_000_000, 5);
-	private final SpinnerNumberModel goalLootGpModel = new SpinnerNumberModel(0L, 0L, 2_000_000_000L, 100_000L);
+	private final SpinnerNumberModel goalLootGpModel = new SpinnerNumberModel(0L, 0L, 100_000_000_000L, 100_000L);
 
 	private final JToggleButton lootCollapseButton = createDarkToggleButton("Loot ▾");
 	private final JToggleButton showIgnoredLootButton = createDarkToggleButton("Show Ignored");
@@ -691,7 +692,7 @@ public class BossTrackerPanel extends PluginPanel
 			currentGp += priceCache.getPrice(entry.getKey()) * entry.getValue();
 		}
 
-		goalLootLabel.setText(htmlLabel("Loot Goal: ", formatGp(currentGp) + " / " + formatGp(goal.getLootGoalGp()) + " gp"));
+		goalLootLabel.setText(htmlLabel("Loot Goal: ", GpFormat.compact(currentGp) + " / " + GpFormat.compact(goal.getLootGoalGp()) + " gp"));
 	}
 
 	private JPanel buildLootPanel()
@@ -792,9 +793,9 @@ public class BossTrackerPanel extends PluginPanel
 			? lootTracker.getLifetimeTimeActualSeconds() / 3600.0
 			: sessionManager.computeActualElapsedSeconds() / 3600.0;
 
-		lootGpPerHourLabel.setText(htmlLabelStacked("GP/Hr", hours > 0 ? formatGpAbbreviated(totalGp / hours) : "N/A", "left"));
-		lootGpPerKillLabel.setText(htmlLabelStacked("GP/Kill", kills > 0 ? formatGp(totalGp / kills) : "N/A"));
-		lootTotalGpLabel.setText(htmlLabelStacked("Total GP", formatGp(totalGp), "right"));
+		lootGpPerHourLabel.setText(htmlLabelStacked("GP/Hr", hours > 0 ? GpFormat.abbreviated(totalGp / hours) : "N/A", "left"));
+		lootGpPerKillLabel.setText(htmlLabelStacked("GP/Kill", kills > 0 ? GpFormat.compact(totalGp / kills) : "N/A"));
+		lootTotalGpLabel.setText(htmlLabelStacked("Total GP", GpFormat.compact(totalGp), "right"));
 
 		boolean showIgnored = showIgnoredLootButton.isSelected();
 		int version = lootTracker.getVersion();
@@ -832,7 +833,7 @@ public class BossTrackerPanel extends PluginPanel
 		}
 		int kills = allTime ? lootTracker.getLifetimeMinionKills() : lootTracker.getSessionMinionKills();
 		minionHeaderLabel.setText(htmlLabel("Minion Loot: ",
-			formatGp(totalGp) + " (" + kills + (kills == 1 ? " kill)" : " kills)")));
+			GpFormat.compact(totalGp) + " (" + kills + (kills == 1 ? " kill)" : " kills)")));
 
 		populateLootGrid(minionGridPanel, minionLoot, showIgnored);
 		minionGridPanel.setVisible(!lootCollapseButton.isSelected());
@@ -904,34 +905,16 @@ public class BossTrackerPanel extends PluginPanel
 	{
 		StringBuilder tooltip = new StringBuilder("<html>")
 			.append(priceCache.getName(itemId)).append(" x ").append(quantity)
-			.append("<br>GP/Item: ").append(formatGp(priceCache.getPrice(itemId)))
-			.append("<br>Value: ").append(formatGp(totalValue));
+			.append("<br>GP/Item: ").append(GpFormat.exact(priceCache.getPrice(itemId)))
+			.append("<br>Value: ").append(GpFormat.exact(totalValue));
 
 		long haPrice = priceCache.getHaPrice(itemId);
 		if (haPrice > 0)
 		{
-			tooltip.append("<br>High Alch: ").append(formatGp(haPrice))
-				.append(" ea (").append(formatGp((double) haPrice * quantity)).append(')');
+			tooltip.append("<br>High Alch: ").append(GpFormat.exact(haPrice))
+				.append(" ea (").append(GpFormat.exact((double) haPrice * quantity)).append(')');
 		}
 		return tooltip.append("</html>").toString();
-	}
-
-	private static String formatGp(double value)
-	{
-		return String.format("%,.0f", value);
-	}
-
-	private static String formatGpAbbreviated(double value)
-	{
-		if (Math.abs(value) >= 1_000_000)
-		{
-			return String.format("%,.2fm", value / 1_000_000);
-		}
-		if (Math.abs(value) >= 1_000)
-		{
-			return String.format("%,.2fk", value / 1_000);
-		}
-		return String.format("%,.0f", value);
 	}
 
 	private static final Color BUTTON_SELECTED_COLOR = new Color(77, 77, 77);
@@ -1229,8 +1212,8 @@ public class BossTrackerPanel extends PluginPanel
 			// ever wrote it. killsTracked is the real count and is already on disk.
 			int kills = stats.getKillsTracked();
 			JLabel gpPerKillLabel = new JLabel(htmlLabel("GP/Kill: ",
-				kills > 0 ? formatGp(totalGp / kills) : "N/A"));
-			JLabel totalGpLabel = new JLabel(htmlLabel("Total GP: ", formatGp(totalGp)));
+				kills > 0 ? GpFormat.compact(totalGp / kills) : "N/A"));
+			JLabel totalGpLabel = new JLabel(htmlLabel("Total GP: ", GpFormat.compact(totalGp)));
 			detailPanel.add(createStatsPanel(gpPerKillLabel, totalGpLabel));
 
 			JPanel lootGrid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
@@ -1516,8 +1499,8 @@ public class BossTrackerPanel extends PluginPanel
 
 			JPanel lootStatsRow = new JPanel(new GridLayout(1, 2));
 			lootStatsRow.setOpaque(false);
-			JLabel gpPerKillLabel = new JLabel(htmlLabelStacked("GP/Kill", kills > 0 ? formatGp(totalGp / kills) : "N/A", "left"));
-			JLabel totalGpLabel = new JLabel(htmlLabelStacked("Total GP", formatGp(totalGp), "right"));
+			JLabel gpPerKillLabel = new JLabel(htmlLabelStacked("GP/Kill", kills > 0 ? GpFormat.exact(totalGp / kills) : "N/A", "left"));
+			JLabel totalGpLabel = new JLabel(htmlLabelStacked("Total GP", GpFormat.exact(totalGp), "right"));
 			gpPerKillLabel.setFont(FontManager.getRunescapeSmallFont());
 			totalGpLabel.setFont(FontManager.getRunescapeSmallFont());
 			gpPerKillLabel.setHorizontalAlignment(SwingConstants.LEFT);
@@ -1602,7 +1585,7 @@ public class BossTrackerPanel extends PluginPanel
 		JPanel statsRow = new JPanel(new GridLayout(1, 2));
 		statsRow.setOpaque(false);
 		JLabel killsLabel = new JLabel(htmlLabelStacked("Minion Kills", String.valueOf(entry.getMinionKills()), "left"));
-		JLabel totalGpLabel = new JLabel(htmlLabelStacked("Minion GP", formatGp(totalGp), "right"));
+		JLabel totalGpLabel = new JLabel(htmlLabelStacked("Minion GP", GpFormat.exact(totalGp), "right"));
 		killsLabel.setFont(FontManager.getRunescapeSmallFont());
 		totalGpLabel.setFont(FontManager.getRunescapeSmallFont());
 		killsLabel.setHorizontalAlignment(SwingConstants.LEFT);
@@ -1704,7 +1687,7 @@ public class BossTrackerPanel extends PluginPanel
 		{
 			gp += (double) priceCache.getPrice(item.getKey()) * item.getValue();
 		}
-		return formatGpAbbreviated(gp) + " · " + describeEndReason(trip.getEndReason());
+		return GpFormat.abbreviated(gp) + " · " + describeEndReason(trip.getEndReason());
 	}
 
 	private static String describeEndReason(TripEndReason reason)
