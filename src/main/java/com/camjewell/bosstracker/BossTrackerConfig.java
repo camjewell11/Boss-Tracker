@@ -48,6 +48,11 @@ public interface BossTrackerConfig extends Config
 	)
 	String lootSection = LOOT_SECTION;
 
+	/*
+	 * The history tier colours default to RuneLite's own ground-item value colours (the loot beam
+	 * tiers in GroundItemsConfig: low, medium, high, insane), in that order, with the fifth and
+	 * highest tier taking its highlighted-item purple.
+	 */
 	@ConfigSection(
 		name = "History Highlight",
 		description = "Colors past session rows by how much loot they were worth",
@@ -411,12 +416,12 @@ public interface BossTrackerConfig extends Config
 		position = 2,
 		keyName = "historyTier1Color",
 		name = "Tier 1 Color",
-		description = "Row color for sessions that reach the tier 1 value (default green)",
+		description = "Row color for sessions that reach the tier 1 value (default light blue, RuneLite's low-value loot colour)",
 		section = historySection
 	)
 	default Color historyTier1Color()
 	{
-		return new Color(0x2ECC40);
+		return new Color(0x66B2FF);
 	}
 
 	@ConfigItem(
@@ -436,12 +441,12 @@ public interface BossTrackerConfig extends Config
 		position = 4,
 		keyName = "historyTier2Color",
 		name = "Tier 2 Color",
-		description = "Row color for sessions that reach the tier 2 value (default yellow-green)",
+		description = "Row color for sessions that reach the tier 2 value (default light green, RuneLite's medium-value loot colour)",
 		section = historySection
 	)
 	default Color historyTier2Color()
 	{
-		return new Color(0x9ACD32);
+		return new Color(0x99FF99);
 	}
 
 	@ConfigItem(
@@ -461,12 +466,12 @@ public interface BossTrackerConfig extends Config
 		position = 6,
 		keyName = "historyTier3Color",
 		name = "Tier 3 Color",
-		description = "Row color for sessions that reach the tier 3 value (default yellow)",
+		description = "Row color for sessions that reach the tier 3 value (default orange, RuneLite's high-value loot colour)",
 		section = historySection
 	)
 	default Color historyTier3Color()
 	{
-		return new Color(0xFFDC00);
+		return new Color(0xFF9600);
 	}
 
 	@ConfigItem(
@@ -486,12 +491,12 @@ public interface BossTrackerConfig extends Config
 		position = 8,
 		keyName = "historyTier4Color",
 		name = "Tier 4 Color",
-		description = "Row color for sessions that reach the tier 4 value (default orange)",
+		description = "Row color for sessions that reach the tier 4 value (default pink, RuneLite's insane-value loot colour)",
 		section = historySection
 	)
 	default Color historyTier4Color()
 	{
-		return new Color(0xFF851B);
+		return new Color(0xFF66B2);
 	}
 
 	@ConfigItem(
@@ -511,11 +516,11 @@ public interface BossTrackerConfig extends Config
 		position = 10,
 		keyName = "historyTier5Color",
 		name = "Tier 5 Color",
-		description = "Row color for sessions that reach the tier 5 value (default red)",
+		description = "Row color for sessions that reach the tier 5 value (default purple, RuneLite's highlighted-item colour)",
 		section = historySection
 	)
 	default Color historyTier5Color()
 	{
-		return new Color(0xFF4136);
+		return new Color(0xAA00FF);
 	}
 }
