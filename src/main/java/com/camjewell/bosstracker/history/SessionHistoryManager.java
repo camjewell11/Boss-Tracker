@@ -81,6 +81,10 @@ public class SessionHistoryManager
 					{
 						priceCache.warm(itemId);
 					}
+					for (int itemId : entry.getMinionLootItemQuantities().keySet())
+					{
+						priceCache.warm(itemId);
+					}
 				}
 				version++;
 				loading = false;

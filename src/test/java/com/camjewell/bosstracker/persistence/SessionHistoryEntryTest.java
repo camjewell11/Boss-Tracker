@@ -24,6 +24,9 @@ public class SessionHistoryEntryTest
 
 		assertNotNull(entry.getTrips());
 		assertTrue(entry.getTrips().isEmpty());
+		assertNotNull(entry.getMinionLootItemQuantities());
+		assertTrue(entry.getMinionLootItemQuantities().isEmpty());
+		assertEquals(0, entry.getMinionKills());
 		assertEquals(15, entry.getKillsThisSession());
 	}
 

@@ -920,6 +920,8 @@ public class SessionManager
 		entry.setLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionLoot()));
 		// Every trip is closed by now: each path that ends a session closes the open trip first.
 		entry.setTrips(new ArrayList<>(endedSession.getTrips()));
+		entry.setMinionLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionMinionLoot()));
+		entry.setMinionKills(lootTracker.getSessionMinionKills());
 		return entry;
 	}
 }

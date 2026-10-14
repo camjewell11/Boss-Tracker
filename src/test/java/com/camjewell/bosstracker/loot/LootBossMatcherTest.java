@@ -44,6 +44,31 @@ public class LootBossMatcherTest
 	}
 
 	@Test
+	public void godWarsMinionsMatchTheirGeneralAsMinionsOnly()
+	{
+		assertTrue(LootBossMatcher.matchesMinionLootEvent(Boss.GENERAL_GRAARDOR, "Sergeant Strongstack"));
+		assertTrue(LootBossMatcher.matchesMinionLootEvent(Boss.COMMANDER_ZILYANA, "Growler"));
+		assertTrue(LootBossMatcher.matchesMinionLootEvent(Boss.KREEARRA, "Flight Kilisa"));
+		assertTrue(LootBossMatcher.matchesMinionLootEvent(Boss.KRIL_TSUTSAROTH, "Zakl'n Gritch"));
+
+		// A minion's drop is never the boss's own loot...
+		assertFalse(LootBossMatcher.matchesLootEvent(Boss.GENERAL_GRAARDOR, "Sergeant Strongstack"));
+		// ...nor another general's minion.
+		assertFalse(LootBossMatcher.matchesMinionLootEvent(Boss.GENERAL_GRAARDOR, "Growler"));
+		// ...nor the general itself.
+		assertFalse(LootBossMatcher.matchesMinionLootEvent(Boss.GENERAL_GRAARDOR, "General Graardor"));
+	}
+
+	@Test
+	public void onlyTheGeneralsHaveMinions()
+	{
+		assertTrue(LootBossMatcher.hasMinions(Boss.KREEARRA));
+		assertFalse(LootBossMatcher.hasMinions(Boss.CERBERUS));
+		assertFalse(LootBossMatcher.hasMinions(Boss.NEX));
+		assertFalse(LootBossMatcher.hasMinions(null));
+	}
+
+	@Test
 	public void unrelatedNamesDoNotMatch()
 	{
 		assertFalse(LootBossMatcher.matchesLootEvent(Boss.GROTESQUE_GUARDIANS, "Cerberus"));

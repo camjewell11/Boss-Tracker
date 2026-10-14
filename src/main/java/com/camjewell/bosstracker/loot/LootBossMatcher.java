@@ -57,6 +57,45 @@ public final class LootBossMatcher
 		LOOT_ALIASES.put(Boss.HUEYCOATL, Collections.singletonList("The Hueycoatl"));
 	}
 
+	/**
+	 * The God Wars generals' bodyguards, which share their general's drop table and are killed
+	 * alongside it. Names match the loot event's NPC name: all but Zilyana's appear verbatim in
+	 * RuneLite's slayer task targets, and hers (which count toward no task) match the OSRS wiki.
+	 */
+	private static final Map<Boss, List<String>> MINIONS = new EnumMap<>(Boss.class);
+
+	static
+	{
+		MINIONS.put(Boss.GENERAL_GRAARDOR, Arrays.asList("Sergeant Strongstack", "Sergeant Steelwill", "Sergeant Grimspike"));
+		MINIONS.put(Boss.COMMANDER_ZILYANA, Arrays.asList("Starlight", "Growler", "Bree"));
+		MINIONS.put(Boss.KREEARRA, Arrays.asList("Wingman Skree", "Flockleader Geerin", "Flight Kilisa"));
+		MINIONS.put(Boss.KRIL_TSUTSAROTH, Arrays.asList("Tstanon Karlak", "Zakl'n Gritch", "Balfrug Kreeyath"));
+	}
+
+	public static boolean hasMinions(Boss boss)
+	{
+		return boss != null && MINIONS.containsKey(boss);
+	}
+
+	/**
+	 * @return true if the loot event came from one of {@code boss}'s minions rather than the boss.
+	 */
+	public static boolean matchesMinionLootEvent(Boss boss, String lootEventName)
+	{
+		if (boss == null || lootEventName == null)
+		{
+			return false;
+		}
+		for (String minion : MINIONS.getOrDefault(boss, Collections.emptyList()))
+		{
+			if (minion.equalsIgnoreCase(lootEventName))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private LootBossMatcher()
 	{
 	}

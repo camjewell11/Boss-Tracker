@@ -4,6 +4,7 @@ import com.camjewell.bosstracker.BossTrackerConfig;
 import com.camjewell.bosstracker.boss.Boss;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.lookup.BossLookupManager;
+import com.camjewell.bosstracker.loot.LootBossMatcher;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
@@ -135,6 +136,9 @@ public class BossTrackerPanel extends PluginPanel
 	private final JLabel lootGpPerHourLabel = new JLabel(htmlLabelStacked("GP/Hr", "N/A"));
 	private final JLabel lootTotalGpLabel = new JLabel(htmlLabelStacked("Total GP", "N/A", "right"));
 	private final JPanel lootGridPanel = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
+	private final JPanel minionSectionPanel = new JPanel(new BorderLayout(0, 6));
+	private final JLabel minionHeaderLabel = new JLabel();
+	private final JPanel minionGridPanel = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
 	private int lastRenderedLootVersion = -1;
 	private boolean lastRenderedLootAllTime;
 	private boolean lastRenderedLootShowIgnored;
@@ -709,6 +713,7 @@ public class BossTrackerPanel extends PluginPanel
 		lootCollapseButton.addActionListener(e ->
 		{
 			lootGridPanel.setVisible(!lootCollapseButton.isSelected());
+			minionGridPanel.setVisible(!lootCollapseButton.isSelected());
 			sessionViewPanel.revalidate();
 			sessionViewPanel.repaint();
 		});
@@ -735,8 +740,19 @@ public class BossTrackerPanel extends PluginPanel
 		lootGridPanel.setOpaque(false);
 		lootGridPanel.setBorder(new EmptyBorder(10, 2, 8, 2));
 
+		// Minion drops (God Wars bodyguards) sit under the boss's own loot, hidden for other bosses.
+		minionHeaderLabel.setFont(FontManager.getRunescapeSmallFont());
+		minionGridPanel.setOpaque(false);
+		minionSectionPanel.setOpaque(false);
+		minionSectionPanel.setBorder(new CompoundBorder(new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49)),
+			new EmptyBorder(6, 5, 8, 2)));
+		minionSectionPanel.add(minionHeaderLabel, BorderLayout.NORTH);
+		minionSectionPanel.add(minionGridPanel, BorderLayout.CENTER);
+		minionSectionPanel.setVisible(false);
+
 		wrapper.add(headerPanel, BorderLayout.NORTH);
 		wrapper.add(lootGridPanel, BorderLayout.CENTER);
+		wrapper.add(minionSectionPanel, BorderLayout.SOUTH);
 		return wrapper;
 	}
 
@@ -752,6 +768,7 @@ public class BossTrackerPanel extends PluginPanel
 				lootGridPanel.removeAll();
 				lootGridPanel.revalidate();
 				lootGridPanel.repaint();
+				minionSectionPanel.setVisible(false);
 				lastRenderedLootBoss = null;
 				lastRenderedLootVersion = -1;
 			}
@@ -791,11 +808,52 @@ public class BossTrackerPanel extends PluginPanel
 		lastRenderedLootShowIgnored = showIgnored;
 		lastRenderedLootBoss = display.getBoss();
 
-		lootGridPanel.removeAll();
+		populateLootGrid(lootGridPanel, lootMap, showIgnored);
+		refreshMinionSection(display.getBoss(), allTime, showIgnored);
+	}
 
+	/**
+	 * Shows the boss's minion drops under its own loot, following the same session/all-time
+	 * toggle. Hidden for bosses without minions and until the first minion drop.
+	 */
+	private void refreshMinionSection(Boss boss, boolean allTime, boolean showIgnored)
+	{
+		Map<Integer, Integer> minionLoot = allTime ? lootTracker.getLifetimeMinionLoot() : lootTracker.getSessionMinionLoot();
+		if (!LootBossMatcher.hasMinions(boss) || minionLoot.isEmpty())
+		{
+			minionSectionPanel.setVisible(false);
+			return;
+		}
+
+		double totalGp = 0;
+		for (Map.Entry<Integer, Integer> item : minionLoot.entrySet())
+		{
+			totalGp += (double) priceCache.getPrice(item.getKey()) * item.getValue();
+		}
+		int kills = allTime ? lootTracker.getLifetimeMinionKills() : lootTracker.getSessionMinionKills();
+		minionHeaderLabel.setText(htmlLabel("Minion Loot: ",
+			formatGp(totalGp) + " (" + kills + (kills == 1 ? " kill)" : " kills)")));
+
+		populateLootGrid(minionGridPanel, minionLoot, showIgnored);
+		minionGridPanel.setVisible(!lootCollapseButton.isSelected());
+		minionSectionPanel.setVisible(true);
+	}
+
+	/**
+	 * Fills a loot grid, highest value first. Ignored items are hidden unless {@code showIgnored},
+	 * then shown faded; right-click toggles an item's ignored state for the tracked boss.
+	 */
+	private void populateLootGrid(JPanel grid, Map<Integer, Integer> lootMap, boolean showIgnored)
+	{
+		grid.removeAll();
+
+		Map<Integer, Double> valueByItem = new LinkedHashMap<>();
+		for (Map.Entry<Integer, Integer> entry : lootMap.entrySet())
+		{
+			valueByItem.put(entry.getKey(), (double) priceCache.getPrice(entry.getKey()) * entry.getValue());
+		}
 		List<Integer> sortedIds = new ArrayList<>(valueByItem.keySet());
 		sortedIds.sort((a, b) -> Double.compare(valueByItem.get(b), valueByItem.get(a)));
-
 		for (int itemId : sortedIds)
 		{
 			boolean ignored = lootTracker.getIgnoredItemIds().contains(itemId);
@@ -835,11 +893,11 @@ public class BossTrackerPanel extends PluginPanel
 			slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 			slot.setPreferredSize(new Dimension(40, 40));
 			slot.add(itemLabel, BorderLayout.CENTER);
-			lootGridPanel.add(slot);
+			grid.add(slot);
 		}
 
-		lootGridPanel.revalidate();
-		lootGridPanel.repaint();
+		grid.revalidate();
+		grid.repaint();
 	}
 
 	private String buildLootTooltip(int itemId, int quantity, double totalValue)
@@ -1490,6 +1548,12 @@ public class BossTrackerPanel extends PluginPanel
 			detailPanel.add(lootSection);
 		}
 
+		if (entry.getMinionLootItemQuantities() != null && !entry.getMinionLootItemQuantities().isEmpty())
+		{
+			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+			detailPanel.add(buildHistoryMinionSection(entry));
+		}
+
 		detailPanel.setVisible(expandButton.isSelected());
 		expandButton.addActionListener(e ->
 		{
@@ -1510,6 +1574,63 @@ public class BossTrackerPanel extends PluginPanel
 		entryPanel.add(headerContainer, BorderLayout.NORTH);
 		entryPanel.add(detailPanel, BorderLayout.CENTER);
 		return entryPanel;
+	}
+
+	/**
+	 * A saved session's minion drops, laid out like its loot section: kills and total value, then
+	 * the items, highest value first.
+	 */
+	private JPanel buildHistoryMinionSection(SessionHistoryEntry entry)
+	{
+		Map<Integer, Integer> minionLoot = entry.getMinionLootItemQuantities();
+		Map<Integer, Double> valueByItem = new LinkedHashMap<>();
+		double totalGp = 0;
+		for (Map.Entry<Integer, Integer> item : minionLoot.entrySet())
+		{
+			double value = (double) priceCache.getPrice(item.getKey()) * item.getValue();
+			valueByItem.put(item.getKey(), value);
+			totalGp += value;
+		}
+		List<Integer> sortedItemIds = new ArrayList<>(valueByItem.keySet());
+		sortedItemIds.sort((a, b) -> Double.compare(valueByItem.get(b), valueByItem.get(a)));
+
+		JPanel section = new JPanel();
+		section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
+		section.setOpaque(false);
+		section.setBorder(new CompoundBorder(new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49)), new EmptyBorder(8, 0, 0, 0)));
+
+		JPanel statsRow = new JPanel(new GridLayout(1, 2));
+		statsRow.setOpaque(false);
+		JLabel killsLabel = new JLabel(htmlLabelStacked("Minion Kills", String.valueOf(entry.getMinionKills()), "left"));
+		JLabel totalGpLabel = new JLabel(htmlLabelStacked("Minion GP", formatGp(totalGp), "right"));
+		killsLabel.setFont(FontManager.getRunescapeSmallFont());
+		totalGpLabel.setFont(FontManager.getRunescapeSmallFont());
+		killsLabel.setHorizontalAlignment(SwingConstants.LEFT);
+		totalGpLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+		statsRow.add(killsLabel);
+		statsRow.add(totalGpLabel);
+		section.add(statsRow);
+		section.add(Box.createRigidArea(new Dimension(0, 10)));
+
+		JPanel grid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
+		grid.setOpaque(false);
+		for (int itemId : sortedItemIds)
+		{
+			int quantity = minionLoot.get(itemId);
+			JLabel itemLabel = new JLabel();
+			itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
+			itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, valueByItem.get(itemId)));
+			itemManager.getImage(itemId, quantity, quantity > 1).addTo(itemLabel);
+
+			JPanel slot = new JPanel(new BorderLayout());
+			slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+			slot.setBorder(new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49)));
+			slot.setPreferredSize(new Dimension(40, 40));
+			slot.add(itemLabel, BorderLayout.CENTER);
+			grid.add(slot);
+		}
+		section.add(grid);
+		return section;
 	}
 
 	/**

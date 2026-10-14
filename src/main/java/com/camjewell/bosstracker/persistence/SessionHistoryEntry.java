@@ -33,4 +33,9 @@ public class SessionHistoryEntry
 	 * place when the key is missing) and for raids and other single-run encounters.
 	 */
 	private List<Trip> trips = new ArrayList<>();
+
+	/** The session's minion drops (God Wars bodyguards), kept apart from the boss's loot. */
+	private Map<Integer, Integer> minionLootItemQuantities = new LinkedHashMap<>();
+
+	private int minionKills;
 }

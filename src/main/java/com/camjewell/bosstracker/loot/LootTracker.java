@@ -58,6 +58,19 @@ public class LootTracker
 	@Getter
 	private final Set<Integer> ignoredItemIds = new HashSet<>();
 
+	/** Minion drops for the tracked boss, kept apart from its own; see LootBossMatcher. */
+	@Getter
+	private final Map<Integer, Integer> sessionMinionLoot = new LinkedHashMap<>();
+
+	@Getter
+	private final Map<Integer, Integer> lifetimeMinionLoot = new LinkedHashMap<>();
+
+	@Getter
+	private int sessionMinionKills;
+
+	@Getter
+	private int lifetimeMinionKills;
+
 	/**
 	 * The boss's all-time tracked-kill count, used as the denominator for all-time GP/kill. Loot
 	 * is only recorded while a session is tracking that boss, which is exactly when kills are
@@ -99,6 +112,8 @@ public class LootTracker
 	public void startNewSession(Boss boss)
 	{
 		sessionLoot.clear();
+		sessionMinionLoot.clear();
+		sessionMinionKills = 0;
 		trackedBoss = null;
 		ensureLoaded(boss);
 	}
@@ -116,6 +131,8 @@ public class LootTracker
 
 		trackedBoss = boss;
 		lifetimeLoot.clear();
+		lifetimeMinionLoot.clear();
+		lifetimeMinionKills = 0;
 		ignoredItemIds.clear();
 		lifetimeKillsTracked = 0;
 		lifetimeTimeActualSeconds = 0;
@@ -136,6 +153,8 @@ public class LootTracker
 			if (trackedBoss == boss)
 			{
 				lifetimeLoot.putAll(loot.getItemQuantities());
+				lifetimeMinionLoot.putAll(loot.getMinionItemQuantities());
+				lifetimeMinionKills = loot.getMinionKills();
 				ignoredItemIds.addAll(loot.getIgnoredItemIds());
 				lifetimeKillsTracked = stats.getKillsTracked();
 				lifetimeTimeActualSeconds = stats.getTotalTimeActualSeconds();
@@ -152,6 +171,10 @@ public class LootTracker
 					{
 						priceCache.warm(itemId);
 					}
+					for (int itemId : loot.getMinionItemQuantities().keySet())
+					{
+						priceCache.warm(itemId);
+					}
 					version++;
 				});
 			}
@@ -163,12 +186,21 @@ public class LootTracker
 	 * the active session is tracking (loot for any other boss/event is ignored, matching the
 	 * original plugin's behavior of only recording loot while actively tracking that boss).
 	 *
-	 * @return true if the loot belonged to {@code sessionBoss} and was recorded.
+	 * @return true if the loot was {@code sessionBoss}'s own drop and was recorded. Minion drops are
+	 * recorded too but return false: they are not the boss's loot and belong to no trip.
 	 */
 	public boolean onLootReceived(Boss sessionBoss, String lootEventName, Collection<ItemStack> items)
 	{
-		if (sessionBoss == null || items == null || items.isEmpty()
-			|| !LootBossMatcher.matchesLootEvent(sessionBoss, lootEventName))
+		if (sessionBoss == null || items == null || items.isEmpty())
+		{
+			return false;
+		}
+		if (LootBossMatcher.matchesMinionLootEvent(sessionBoss, lootEventName))
+		{
+			recordMinionLoot(sessionBoss, items);
+			return false;
+		}
+		if (!LootBossMatcher.matchesLootEvent(sessionBoss, lootEventName))
 		{
 			return false;
 		}
@@ -229,6 +261,40 @@ public class LootTracker
 		version++;
 
 		persistIgnoreList(trackedBoss, new HashSet<>(ignoredItemIds));
+	}
+
+	/**
+	 * Records a minion drop: never a boss kill, and kept out of the boss's loot totals and goal.
+	 */
+	private void recordMinionLoot(Boss boss, Collection<ItemStack> items)
+	{
+		ensureLoaded(boss);
+		for (ItemStack stack : items)
+		{
+			sessionMinionLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			lifetimeMinionLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			priceCache.warm(stack.getId());
+		}
+		sessionMinionKills++;
+		lifetimeMinionKills++;
+		version++;
+
+		if (asyncExecutor == null)
+		{
+			return;
+		}
+		long accountHash = client.getAccountHash();
+		List<ItemStack> snapshot = new ArrayList<>(items);
+		asyncExecutor.execute(() ->
+		{
+			BossLoot loot = lootStore.load(accountHash, boss);
+			for (ItemStack stack : snapshot)
+			{
+				loot.getMinionItemQuantities().merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			}
+			loot.setMinionKills(loot.getMinionKills() + 1);
+			lootStore.save(accountHash, boss, loot);
+		});
 	}
 
 	private void persistLoot(Boss boss, Collection<ItemStack> items)

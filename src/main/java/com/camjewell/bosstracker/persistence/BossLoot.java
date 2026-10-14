@@ -18,4 +18,13 @@ public class BossLoot
 {
 	private Map<Integer, Integer> itemQuantities = new HashMap<>();
 	private Set<Integer> ignoredItemIds = new HashSet<>();
+
+	/**
+	 * Loot from this boss's minions (the God Wars generals' bodyguards), kept apart from the
+	 * boss's own drops. Empty for bosses without minions and for files saved before it existed.
+	 */
+	private Map<Integer, Integer> minionItemQuantities = new HashMap<>();
+
+	/** One per minion drop received. */
+	private int minionKills;
 }
