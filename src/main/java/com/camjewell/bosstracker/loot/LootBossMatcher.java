@@ -21,11 +21,10 @@ import java.util.Map;
  * "Chambers of Xeric") are resolved by checking against whichever {@code Boss} the current
  * session is already tracking, rather than by picking one canonical owner up front.
  *
- * <p>The original plugin's equivalent check ({@code FileReadWriter.bossNameMatcher()}) hardcoded
- * "The Gauntlet" as the loot event name for <em>both</em> the regular and Corrupted Gauntlet,
- * which meant Corrupted Gauntlet loot could never match (its reward chest reports a distinct
- * event name). {@link Boss#CORRUPTED_GAUNTLET} is mapped to "The Corrupted Gauntlet" here
- * instead; verify this string in-game since it can't be confirmed without a live client.
+ * <p>The Gauntlet's reward arrives as NPC loot from the Hunllef that died ("Crystalline Hunllef"
+ * or "Corrupted Hunllef"), confirmed in-game. Older RuneLite versions reported both variants as
+ * the event "The Gauntlet"; that name is kept for both and, like Chambers of Xeric, resolved by
+ * whichever one the current session is tracking.
  *
  * <p>{@link Boss#COLOSSEUM}'s alias ("Fortis Colosseum") and the assumption that
  * {@link Boss#ARAXXOR}/{@link Boss#MAGGOT_KING}/{@link Boss#BARROWS} need no alias at all were
@@ -47,8 +46,8 @@ public final class LootBossMatcher
 		LOOT_ALIASES.put(Boss.TOA_EXPERT, Collections.singletonList("Tombs of Amascut"));
 		LOOT_ALIASES.put(Boss.THEATRE_OF_BLOOD, Collections.singletonList("Theatre of Blood"));
 		LOOT_ALIASES.put(Boss.THEATRE_OF_BLOOD_HM, Collections.singletonList("Theatre of Blood"));
-		LOOT_ALIASES.put(Boss.GAUNTLET, Collections.singletonList("The Gauntlet"));
-		LOOT_ALIASES.put(Boss.CORRUPTED_GAUNTLET, Collections.singletonList("The Corrupted Gauntlet"));
+		LOOT_ALIASES.put(Boss.GAUNTLET, Arrays.asList("Crystalline Hunllef", "The Gauntlet"));
+		LOOT_ALIASES.put(Boss.CORRUPTED_GAUNTLET, Arrays.asList("Corrupted Hunllef", "The Gauntlet"));
 		LOOT_ALIASES.put(Boss.NIGHTMARE, Collections.singletonList("The Nightmare"));
 		LOOT_ALIASES.put(Boss.PHOSANIS_NIGHTMARE, Collections.singletonList("The Nightmare"));
 		LOOT_ALIASES.put(Boss.ROYAL_TITANS, Arrays.asList("Branda the Fire Queen", "Eldric the Ice King"));

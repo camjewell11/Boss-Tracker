@@ -76,4 +76,13 @@ public class LootBossMatcherTest
 		assertFalse(LootBossMatcher.matchesLootEvent(Boss.CERBERUS, null));
 		assertFalse(LootBossMatcher.matchesLootEvent(null, "Dusk"));
 	}
+
+	@Test
+	public void gauntletLootComesFromTheHunllef()
+	{
+		assertTrue(LootBossMatcher.matchesLootEvent(Boss.GAUNTLET, "Crystalline Hunllef"));
+		assertTrue(LootBossMatcher.matchesLootEvent(Boss.CORRUPTED_GAUNTLET, "Corrupted Hunllef"));
+		assertFalse(LootBossMatcher.matchesLootEvent(Boss.GAUNTLET, "Corrupted Hunllef"));
+		assertFalse(LootBossMatcher.matchesLootEvent(Boss.CORRUPTED_GAUNTLET, "Crystalline Hunllef"));
+	}
 }
