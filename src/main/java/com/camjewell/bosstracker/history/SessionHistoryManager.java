@@ -85,6 +85,10 @@ public class SessionHistoryManager
 					{
 						priceCache.warm(itemId);
 					}
+					for (int itemId : entry.getPerfectBonusItemQuantities().keySet())
+					{
+						priceCache.warm(itemId);
+					}
 				}
 				version++;
 				loading = false;

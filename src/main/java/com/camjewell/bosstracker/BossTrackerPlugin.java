@@ -16,6 +16,7 @@ import com.camjewell.bosstracker.ui.SessionOverlay;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.inject.Inject;
@@ -38,6 +39,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.ItemStack;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -301,9 +303,10 @@ public class BossTrackerPlugin extends Plugin
 
 		BossSession session = sessionManager.getSession();
 		Boss trackedBoss = session != null ? session.getBoss() : null;
-		if (lootTracker.onLootReceived(trackedBoss, event.getName(), event.getItems()))
+		List<ItemStack> bossLoot = lootTracker.onLootReceived(trackedBoss, event.getName(), event.getItems());
+		if (bossLoot != null)
 		{
-			sessionManager.onTripLoot(event.getItems());
+			sessionManager.onTripLoot(bossLoot);
 		}
 		SwingUtilities.invokeLater(panel::refresh);
 	}

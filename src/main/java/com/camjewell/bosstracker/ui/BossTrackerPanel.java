@@ -5,6 +5,7 @@ import com.camjewell.bosstracker.boss.Boss;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.lookup.BossLookupManager;
 import com.camjewell.bosstracker.loot.LootBossMatcher;
+import com.camjewell.bosstracker.loot.PerfectKillLoot;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
@@ -137,9 +138,8 @@ public class BossTrackerPanel extends PluginPanel
 	private final JLabel lootGpPerHourLabel = new JLabel(htmlLabelStacked("GP/Hr", "N/A"));
 	private final JLabel lootTotalGpLabel = new JLabel(htmlLabelStacked("Total GP", "N/A", "right"));
 	private final JPanel lootGridPanel = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
-	private final JPanel minionSectionPanel = new JPanel(new BorderLayout(0, 6));
-	private final JLabel minionHeaderLabel = new JLabel();
-	private final JPanel minionGridPanel = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
+	private final ExtraLootSection minionSection = new ExtraLootSection();
+	private final ExtraLootSection perfectBonusSection = new ExtraLootSection();
 	private int lastRenderedLootVersion = -1;
 	private boolean lastRenderedLootAllTime;
 	private boolean lastRenderedLootShowIgnored;
@@ -714,7 +714,8 @@ public class BossTrackerPanel extends PluginPanel
 		lootCollapseButton.addActionListener(e ->
 		{
 			lootGridPanel.setVisible(!lootCollapseButton.isSelected());
-			minionGridPanel.setVisible(!lootCollapseButton.isSelected());
+			minionSection.grid.setVisible(!lootCollapseButton.isSelected());
+			perfectBonusSection.grid.setVisible(!lootCollapseButton.isSelected());
 			sessionViewPanel.revalidate();
 			sessionViewPanel.repaint();
 		});
@@ -741,19 +742,16 @@ public class BossTrackerPanel extends PluginPanel
 		lootGridPanel.setOpaque(false);
 		lootGridPanel.setBorder(new EmptyBorder(10, 2, 8, 2));
 
-		// Minion drops (God Wars bodyguards) sit under the boss's own loot, hidden for other bosses.
-		minionHeaderLabel.setFont(FontManager.getRunescapeSmallFont());
-		minionGridPanel.setOpaque(false);
-		minionSectionPanel.setOpaque(false);
-		minionSectionPanel.setBorder(new CompoundBorder(new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49)),
-			new EmptyBorder(6, 5, 8, 2)));
-		minionSectionPanel.add(minionHeaderLabel, BorderLayout.NORTH);
-		minionSectionPanel.add(minionGridPanel, BorderLayout.CENTER);
-		minionSectionPanel.setVisible(false);
+		// Minion drops (God Wars bodyguards) and perfect-kill bonus loot (Desert Treasure II
+		// bosses) sit under the boss's own loot, each hidden for bosses it doesn't apply to.
+		JPanel extraSections = new JPanel(new BorderLayout());
+		extraSections.setOpaque(false);
+		extraSections.add(minionSection.panel, BorderLayout.NORTH);
+		extraSections.add(perfectBonusSection.panel, BorderLayout.SOUTH);
 
 		wrapper.add(headerPanel, BorderLayout.NORTH);
 		wrapper.add(lootGridPanel, BorderLayout.CENTER);
-		wrapper.add(minionSectionPanel, BorderLayout.SOUTH);
+		wrapper.add(extraSections, BorderLayout.SOUTH);
 		return wrapper;
 	}
 
@@ -769,7 +767,8 @@ public class BossTrackerPanel extends PluginPanel
 				lootGridPanel.removeAll();
 				lootGridPanel.revalidate();
 				lootGridPanel.repaint();
-				minionSectionPanel.setVisible(false);
+				minionSection.panel.setVisible(false);
+				perfectBonusSection.panel.setVisible(false);
 				lastRenderedLootBoss = null;
 				lastRenderedLootVersion = -1;
 			}
@@ -810,34 +809,64 @@ public class BossTrackerPanel extends PluginPanel
 		lastRenderedLootBoss = display.getBoss();
 
 		populateLootGrid(lootGridPanel, lootMap, showIgnored);
-		refreshMinionSection(display.getBoss(), allTime, showIgnored);
+
+		Boss boss = display.getBoss();
+		refreshExtraSection(minionSection, LootBossMatcher.hasMinions(boss), "Minion Loot: ", "minion kill",
+			allTime ? lootTracker.getLifetimeMinionLoot() : lootTracker.getSessionMinionLoot(),
+			allTime ? lootTracker.getLifetimeMinionKills() : lootTracker.getSessionMinionKills(), showIgnored);
+		refreshExtraSection(perfectBonusSection, PerfectKillLoot.hasPerfectKillBonus(boss), "Perfect Kill Bonus: ", "perfect kill",
+			allTime ? lootTracker.getLifetimePerfectBonusLoot() : lootTracker.getSessionPerfectBonusLoot(),
+			allTime ? lootTracker.getLifetimePerfectKills() : lootTracker.getSessionPerfectKills(), showIgnored);
 	}
 
 	/**
-	 * Shows the boss's minion drops under its own loot, following the same session/all-time
-	 * toggle. Hidden for bosses without minions and until the first minion drop.
+	 * A loot section under the boss's own (minion drops, perfect-kill bonus), with its own value
+	 * and kill count, following the same session/all-time toggle. Hidden for bosses it doesn't
+	 * apply to and until its first drop.
 	 */
-	private void refreshMinionSection(Boss boss, boolean allTime, boolean showIgnored)
+	private static final class ExtraLootSection
 	{
-		Map<Integer, Integer> minionLoot = allTime ? lootTracker.getLifetimeMinionLoot() : lootTracker.getSessionMinionLoot();
-		if (!LootBossMatcher.hasMinions(boss) || minionLoot.isEmpty())
+		final JPanel panel = new JPanel(new BorderLayout(0, 6));
+		final JLabel header = new JLabel();
+		final JPanel grid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
+
+		ExtraLootSection()
 		{
-			minionSectionPanel.setVisible(false);
+			header.setFont(FontManager.getRunescapeSmallFont());
+			grid.setOpaque(false);
+			panel.setOpaque(false);
+			panel.setBorder(new CompoundBorder(new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49)),
+				new EmptyBorder(6, 5, 8, 2)));
+			panel.add(header, BorderLayout.NORTH);
+			panel.add(grid, BorderLayout.CENTER);
+			panel.setVisible(false);
+		}
+	}
+
+	/**
+	 * @param killNoun what the count counts, singular ("minion kill"), so the header never reads
+	 * as boss kills.
+	 */
+	private void refreshExtraSection(ExtraLootSection section, boolean applies, String title, String killNoun,
+		Map<Integer, Integer> loot, int kills, boolean showIgnored)
+	{
+		if (!applies || loot.isEmpty())
+		{
+			section.panel.setVisible(false);
 			return;
 		}
 
 		double totalGp = 0;
-		for (Map.Entry<Integer, Integer> item : minionLoot.entrySet())
+		for (Map.Entry<Integer, Integer> item : loot.entrySet())
 		{
 			totalGp += (double) priceCache.getPrice(item.getKey()) * item.getValue();
 		}
-		int kills = allTime ? lootTracker.getLifetimeMinionKills() : lootTracker.getSessionMinionKills();
-		minionHeaderLabel.setText(htmlLabel("Minion Loot: ",
-			GpFormat.compact(totalGp) + " (" + kills + (kills == 1 ? " kill)" : " kills)")));
+		section.header.setText(htmlLabel(title,
+			GpFormat.compact(totalGp) + " (" + kills + " " + killNoun + (kills == 1 ? ")" : "s)")));
 
-		populateLootGrid(minionGridPanel, minionLoot, showIgnored);
-		minionGridPanel.setVisible(!lootCollapseButton.isSelected());
-		minionSectionPanel.setVisible(true);
+		populateLootGrid(section.grid, loot, showIgnored);
+		section.grid.setVisible(!lootCollapseButton.isSelected());
+		section.panel.setVisible(true);
 	}
 
 	/**
@@ -1534,7 +1563,14 @@ public class BossTrackerPanel extends PluginPanel
 		if (entry.getMinionLootItemQuantities() != null && !entry.getMinionLootItemQuantities().isEmpty())
 		{
 			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
-			detailPanel.add(buildHistoryMinionSection(entry));
+			detailPanel.add(buildHistoryExtraSection(entry.getMinionLootItemQuantities(),
+				"Minion Kills", entry.getMinionKills(), "Minion GP"));
+		}
+		if (entry.getPerfectBonusItemQuantities() != null && !entry.getPerfectBonusItemQuantities().isEmpty())
+		{
+			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+			detailPanel.add(buildHistoryExtraSection(entry.getPerfectBonusItemQuantities(),
+				"Perfect Kills", entry.getPerfectKills(), "Bonus GP"));
 		}
 
 		detailPanel.setVisible(expandButton.isSelected());
@@ -1560,15 +1596,14 @@ public class BossTrackerPanel extends PluginPanel
 	}
 
 	/**
-	 * A saved session's minion drops, laid out like its loot section: kills and total value, then
-	 * the items, highest value first.
+	 * A saved session's minion drops or perfect-kill bonus, laid out like its loot section: kills
+	 * and total value, then the items, highest value first.
 	 */
-	private JPanel buildHistoryMinionSection(SessionHistoryEntry entry)
+	private JPanel buildHistoryExtraSection(Map<Integer, Integer> extraLoot, String killsKey, int kills, String gpKey)
 	{
-		Map<Integer, Integer> minionLoot = entry.getMinionLootItemQuantities();
 		Map<Integer, Double> valueByItem = new LinkedHashMap<>();
 		double totalGp = 0;
-		for (Map.Entry<Integer, Integer> item : minionLoot.entrySet())
+		for (Map.Entry<Integer, Integer> item : extraLoot.entrySet())
 		{
 			double value = (double) priceCache.getPrice(item.getKey()) * item.getValue();
 			valueByItem.put(item.getKey(), value);
@@ -1584,8 +1619,8 @@ public class BossTrackerPanel extends PluginPanel
 
 		JPanel statsRow = new JPanel(new GridLayout(1, 2));
 		statsRow.setOpaque(false);
-		JLabel killsLabel = new JLabel(htmlLabelStacked("Minion Kills", String.valueOf(entry.getMinionKills()), "left"));
-		JLabel totalGpLabel = new JLabel(htmlLabelStacked("Minion GP", GpFormat.exact(totalGp), "right"));
+		JLabel killsLabel = new JLabel(htmlLabelStacked(killsKey, String.valueOf(kills), "left"));
+		JLabel totalGpLabel = new JLabel(htmlLabelStacked(gpKey, GpFormat.exact(totalGp), "right"));
 		killsLabel.setFont(FontManager.getRunescapeSmallFont());
 		totalGpLabel.setFont(FontManager.getRunescapeSmallFont());
 		killsLabel.setHorizontalAlignment(SwingConstants.LEFT);
@@ -1599,7 +1634,7 @@ public class BossTrackerPanel extends PluginPanel
 		grid.setOpaque(false);
 		for (int itemId : sortedItemIds)
 		{
-			int quantity = minionLoot.get(itemId);
+			int quantity = extraLoot.get(itemId);
 			JLabel itemLabel = new JLabel();
 			itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
 			itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, valueByItem.get(itemId)));

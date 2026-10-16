@@ -38,4 +38,9 @@ public class SessionHistoryEntry
 	private Map<Integer, Integer> minionLootItemQuantities = new LinkedHashMap<>();
 
 	private int minionKills;
+
+	/** The extra loot from the session's perfect kills, kept apart from the normal drops. */
+	private Map<Integer, Integer> perfectBonusItemQuantities = new LinkedHashMap<>();
+
+	private int perfectKills;
 }

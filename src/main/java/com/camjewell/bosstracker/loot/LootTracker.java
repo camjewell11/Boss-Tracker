@@ -18,6 +18,7 @@ import java.util.concurrent.Executor;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.ItemStack;
@@ -28,6 +29,7 @@ import net.runelite.client.game.ItemStack;
  * {@link com.camjewell.bosstracker.session.GoalManager}). Boss-name resolution for incoming
  * {@code LootReceived} events is delegated to {@link LootBossMatcher}.
  */
+@Slf4j
 @Singleton
 public class LootTracker
 {
@@ -70,6 +72,19 @@ public class LootTracker
 
 	@Getter
 	private int lifetimeMinionKills;
+
+	/** Perfect-kill bonus drops for the tracked boss, kept apart from its normal drops. */
+	@Getter
+	private final Map<Integer, Integer> sessionPerfectBonusLoot = new LinkedHashMap<>();
+
+	@Getter
+	private final Map<Integer, Integer> lifetimePerfectBonusLoot = new LinkedHashMap<>();
+
+	@Getter
+	private int sessionPerfectKills;
+
+	@Getter
+	private int lifetimePerfectKills;
 
 	/**
 	 * The boss's all-time tracked-kill count, used as the denominator for all-time GP/kill. Loot
@@ -114,6 +129,8 @@ public class LootTracker
 		sessionLoot.clear();
 		sessionMinionLoot.clear();
 		sessionMinionKills = 0;
+		sessionPerfectBonusLoot.clear();
+		sessionPerfectKills = 0;
 		trackedBoss = null;
 		ensureLoaded(boss);
 	}
@@ -133,6 +150,8 @@ public class LootTracker
 		lifetimeLoot.clear();
 		lifetimeMinionLoot.clear();
 		lifetimeMinionKills = 0;
+		lifetimePerfectBonusLoot.clear();
+		lifetimePerfectKills = 0;
 		ignoredItemIds.clear();
 		lifetimeKillsTracked = 0;
 		lifetimeTimeActualSeconds = 0;
@@ -155,6 +174,8 @@ public class LootTracker
 				lifetimeLoot.putAll(loot.getItemQuantities());
 				lifetimeMinionLoot.putAll(loot.getMinionItemQuantities());
 				lifetimeMinionKills = loot.getMinionKills();
+				lifetimePerfectBonusLoot.putAll(loot.getPerfectBonusItemQuantities());
+				lifetimePerfectKills = loot.getPerfectKills();
 				ignoredItemIds.addAll(loot.getIgnoredItemIds());
 				lifetimeKillsTracked = stats.getKillsTracked();
 				lifetimeTimeActualSeconds = stats.getTotalTimeActualSeconds();
@@ -175,6 +196,10 @@ public class LootTracker
 					{
 						priceCache.warm(itemId);
 					}
+					for (int itemId : loot.getPerfectBonusItemQuantities().keySet())
+					{
+						priceCache.warm(itemId);
+					}
 					version++;
 				});
 			}
@@ -186,42 +211,96 @@ public class LootTracker
 	 * the active session is tracking (loot for any other boss/event is ignored, matching the
 	 * original plugin's behavior of only recording loot while actively tracking that boss).
 	 *
-	 * @return true if the loot was {@code sessionBoss}'s own drop and was recorded. Minion drops are
-	 * recorded too but return false: they are not the boss's loot and belong to no trip.
+	 * @return the boss's own drops as recorded, with any perfect-kill bonus taken out, or null if
+	 * this wasn't {@code sessionBoss}'s loot. Minion drops are recorded too but return null: they
+	 * are not the boss's loot and belong to no trip.
 	 */
-	public boolean onLootReceived(Boss sessionBoss, String lootEventName, Collection<ItemStack> items)
+	public List<ItemStack> onLootReceived(Boss sessionBoss, String lootEventName, Collection<ItemStack> items)
 	{
 		if (sessionBoss == null || items == null || items.isEmpty())
 		{
-			return false;
+			return null;
 		}
 		if (LootBossMatcher.matchesMinionLootEvent(sessionBoss, lootEventName))
 		{
 			recordMinionLoot(sessionBoss, items);
-			return false;
+			return null;
 		}
 		if (!LootBossMatcher.matchesLootEvent(sessionBoss, lootEventName))
 		{
-			return false;
+			return null;
 		}
 
 		ensureLoaded(sessionBoss);
 
+		List<ItemStack> bossItems = new ArrayList<>();
+		List<ItemStack> bonusItems = new ArrayList<>();
 		for (ItemStack stack : items)
+		{
+			// Warm the price cache while we're on the client thread (LootReceived is a game
+			// event) so the panel's later EDT-side reads don't need ItemManager at all. The
+			// cached name is also what identifies a perfect-kill drop.
+			priceCache.warm(stack.getId());
+
+			int bonus = PerfectKillLoot.bonusQuantity(sessionBoss, priceCache.getName(stack.getId()), stack.getQuantity());
+			if (bonus > 0)
+			{
+				bonusItems.add(new ItemStack(stack.getId(), bonus));
+				bossItems.add(new ItemStack(stack.getId(), stack.getQuantity() - bonus));
+			}
+			else
+			{
+				bossItems.add(stack);
+			}
+		}
+
+		for (ItemStack stack : bossItems)
 		{
 			sessionLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
 			lifetimeLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
-
-			// Warm the price cache while we're on the client thread (LootReceived is a game
-			// event) so the panel's later EDT-side reads don't need ItemManager at all.
-			priceCache.warm(stack.getId());
+		}
+		if (!bonusItems.isEmpty())
+		{
+			recordPerfectBonus(sessionBoss, bonusItems);
 		}
 
 		version++;
 
 		goalManager.onLootValueChanged(sessionBoss, computeLifetimeGp());
-		persistLoot(sessionBoss, items);
-		return true;
+		persistLoot(sessionBoss, bossItems);
+		return bossItems;
+	}
+
+	/**
+	 * Records the extra loot from a perfect kill, kept out of the boss's normal loot totals in
+	 * the same way as minion drops.
+	 */
+	private void recordPerfectBonus(Boss boss, List<ItemStack> bonusItems)
+	{
+		log.debug("Perfect kill of {}: bonus {}", boss, bonusItems);
+		for (ItemStack stack : bonusItems)
+		{
+			sessionPerfectBonusLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			lifetimePerfectBonusLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+		}
+		sessionPerfectKills++;
+		lifetimePerfectKills++;
+
+		if (asyncExecutor == null)
+		{
+			return;
+		}
+		long accountHash = client.getAccountHash();
+		asyncExecutor.execute(() ->
+		{
+			BossLoot loot = lootStore.load(accountHash, boss);
+			for (ItemStack stack : bonusItems)
+			{
+				loot.getPerfectBonusItemQuantities().merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			}
+			loot.setPerfectKills(loot.getPerfectKills() + 1);
+			lootStore.save(accountHash, boss, loot);
+		});
 	}
 
 	private long computeLifetimeGp()

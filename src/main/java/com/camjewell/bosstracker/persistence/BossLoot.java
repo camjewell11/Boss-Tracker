@@ -28,6 +28,13 @@ public class BossLoot
 	/** One per minion drop received. */
 	private int minionKills;
 
+	/**
+	 * The extra loot from perfect kills (Desert Treasure II bosses), kept apart from the boss's
+	 * normal drops; see PerfectKillLoot. Empty for other bosses and older files.
+	 */
+	private Map<Integer, Integer> perfectBonusItemQuantities = new HashMap<>();
+	private int perfectKills;
+
 	/** Folds another boss's loot into this one, for bosses that were merged. */
 	public void mergeFrom(BossLoot other)
 	{
@@ -35,5 +42,7 @@ public class BossLoot
 		ignoredItemIds.addAll(other.ignoredItemIds);
 		other.minionItemQuantities.forEach((id, qty) -> minionItemQuantities.merge(id, qty, Integer::sum));
 		minionKills += other.minionKills;
+		other.perfectBonusItemQuantities.forEach((id, qty) -> perfectBonusItemQuantities.merge(id, qty, Integer::sum));
+		perfectKills += other.perfectKills;
 	}
 }

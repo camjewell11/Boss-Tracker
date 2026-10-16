@@ -922,6 +922,8 @@ public class SessionManager
 		entry.setTrips(new ArrayList<>(endedSession.getTrips()));
 		entry.setMinionLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionMinionLoot()));
 		entry.setMinionKills(lootTracker.getSessionMinionKills());
+		entry.setPerfectBonusItemQuantities(new LinkedHashMap<>(lootTracker.getSessionPerfectBonusLoot()));
+		entry.setPerfectKills(lootTracker.getSessionPerfectKills());
 		return entry;
 	}
 }
