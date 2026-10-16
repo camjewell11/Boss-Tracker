@@ -811,43 +811,62 @@ public class BossTrackerPanel extends PluginPanel
 		populateLootGrid(lootGridPanel, lootMap, showIgnored);
 
 		Boss boss = display.getBoss();
-		refreshExtraSection(minionSection, LootBossMatcher.hasMinions(boss), "Minion Loot: ", "minion kill",
+		refreshExtraSection(minionSection, LootBossMatcher.hasMinions(boss), "Minion Loot", "Minion Kills",
 			allTime ? lootTracker.getLifetimeMinionLoot() : lootTracker.getSessionMinionLoot(),
 			allTime ? lootTracker.getLifetimeMinionKills() : lootTracker.getSessionMinionKills(), showIgnored);
-		refreshExtraSection(perfectBonusSection, PerfectKillLoot.hasPerfectKillBonus(boss), "Perfect Kill Bonus: ", "perfect kill",
+		refreshExtraSection(perfectBonusSection, PerfectKillLoot.hasPerfectKillBonus(boss), "Perfect Kill Bonus", "Perfect Kills",
 			allTime ? lootTracker.getLifetimePerfectBonusLoot() : lootTracker.getSessionPerfectBonusLoot(),
 			allTime ? lootTracker.getLifetimePerfectKills() : lootTracker.getSessionPerfectKills(), showIgnored);
 	}
 
 	/**
-	 * A loot section under the boss's own (minion drops, perfect-kill bonus), with its own value
-	 * and kill count, following the same session/all-time toggle. Hidden for bosses it doesn't
-	 * apply to and until its first drop.
+	 * A loot section under the boss's own (minion drops, perfect-kill bonus): a title, then its
+	 * kill count and total value laid out like the main loot stats, then its grid. Follows the
+	 * same session/all-time toggle, and is hidden for bosses it doesn't apply to and until its
+	 * first drop.
 	 */
 	private static final class ExtraLootSection
 	{
 		final JPanel panel = new JPanel(new BorderLayout(0, 6));
-		final JLabel header = new JLabel();
+		final JLabel title = new JLabel();
+		final JLabel killsLabel = new JLabel();
+		final JLabel totalGpLabel = new JLabel();
 		final JPanel grid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
 
 		ExtraLootSection()
 		{
-			header.setFont(FontManager.getRunescapeSmallFont());
+			title.setFont(FontManager.getRunescapeSmallFont());
+			title.setForeground(Color.WHITE);
+			killsLabel.setFont(FontManager.getRunescapeSmallFont());
+			totalGpLabel.setFont(FontManager.getRunescapeSmallFont());
+			killsLabel.setHorizontalAlignment(SwingConstants.LEFT);
+			totalGpLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+
+			JPanel statsRow = new JPanel(new GridLayout(1, 2));
+			statsRow.setOpaque(false);
+			statsRow.setBorder(new EmptyBorder(4, 0, 0, 3));
+			statsRow.add(killsLabel);
+			statsRow.add(totalGpLabel);
+
+			JPanel top = new JPanel(new BorderLayout());
+			top.setOpaque(false);
+			top.add(title, BorderLayout.NORTH);
+			top.add(statsRow, BorderLayout.SOUTH);
+
 			grid.setOpaque(false);
 			panel.setOpaque(false);
 			panel.setBorder(new CompoundBorder(new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49)),
 				new EmptyBorder(6, 5, 8, 2)));
-			panel.add(header, BorderLayout.NORTH);
+			panel.add(top, BorderLayout.NORTH);
 			panel.add(grid, BorderLayout.CENTER);
 			panel.setVisible(false);
 		}
 	}
 
 	/**
-	 * @param killNoun what the count counts, singular ("minion kill"), so the header never reads
-	 * as boss kills.
+	 * @param killsKey names what the count counts ("Minion Kills"), so it never reads as boss kills.
 	 */
-	private void refreshExtraSection(ExtraLootSection section, boolean applies, String title, String killNoun,
+	private void refreshExtraSection(ExtraLootSection section, boolean applies, String title, String killsKey,
 		Map<Integer, Integer> loot, int kills, boolean showIgnored)
 	{
 		if (!applies || loot.isEmpty())
@@ -861,8 +880,9 @@ public class BossTrackerPanel extends PluginPanel
 		{
 			totalGp += (double) priceCache.getPrice(item.getKey()) * item.getValue();
 		}
-		section.header.setText(htmlLabel(title,
-			GpFormat.compact(totalGp) + " (" + kills + " " + killNoun + (kills == 1 ? ")" : "s)")));
+		section.title.setText(title);
+		section.killsLabel.setText(htmlLabelStacked(killsKey, String.valueOf(kills), "left"));
+		section.totalGpLabel.setText(htmlLabelStacked("Total GP", GpFormat.compact(totalGp), "right"));
 
 		populateLootGrid(section.grid, loot, showIgnored);
 		section.grid.setVisible(!lootCollapseButton.isSelected());
