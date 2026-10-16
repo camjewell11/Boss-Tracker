@@ -396,7 +396,7 @@ public interface BossTrackerConfig extends Config
 	)
 	default boolean highlightHistoryByValue()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(
