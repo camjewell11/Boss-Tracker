@@ -84,4 +84,10 @@ public class LootBossMatcherTest
 		assertTrue(LootBossMatcher.matchesLootEvent(Boss.GAUNTLET, "Corrupted Hunllef"));
 		assertFalse(LootBossMatcher.matchesLootEvent(Boss.COLOSSEUM, "Corrupted Hunllef"));
 	}
+
+	@Test
+	public void madAngelLootMatchesItsName()
+	{
+		assertTrue(LootBossMatcher.matchesLootEvent(Boss.MAD_ANGEL, "Mad Angel"));
+	}
 }

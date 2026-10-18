@@ -29,6 +29,7 @@ public enum Boss
 	YAMA("Yama", ItemID.YAMAPET, "Your Yama success count is:"),
 	SHELLBANE_GRYPHON("Shellbane Gryphon", ItemID.GRYPHONBOSSPET, "Your Shellbane Gryphon kill count is:", "gull", "gryphon", "gulliver"),
 	MAGGOT_KING("Maggot King", ItemID.MAGGOTKINGPET, "Your Maggot King kill count is:", "maggot"),
+	MAD_ANGEL("Mad Angel", ItemID.MADANGELPET, "Your Mad Angel kill count is:", "angel"),
 	BRUTUS("Brutus", ItemID.COWBOSSPET, "Your Brutus kill count is:", "cow", "cow boss"),
 	DUKE_SUCELLUS("Duke Sucellus", ItemID.DUKESUCELLUSPET, "Your Duke Sucellus kill count is:"),
 	VARDORVIS("Vardorvis", ItemID.VARDORVISPET, "Your Vardorvis kill count is:"),
