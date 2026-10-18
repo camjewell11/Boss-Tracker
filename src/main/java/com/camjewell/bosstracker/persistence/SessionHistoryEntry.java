@@ -26,6 +26,8 @@ public class SessionHistoryEntry
 	private int fastestKillSeconds;
 	private int idleSeconds;
 	private boolean onSlayerTask;
+	/** A pet dropped during the session. False for entries saved before this was recorded. */
+	private boolean petObtained;
 	private Map<Integer, Integer> lootItemQuantities = new LinkedHashMap<>();
 
 	/**

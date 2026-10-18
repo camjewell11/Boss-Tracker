@@ -1411,6 +1411,29 @@ public class BossTrackerPanel extends PluginPanel
 	}
 
 	private static final int HISTORY_VALUE_TIERS = 5;
+	private static final Color PET_GOLD = new Color(0xFFD700);
+
+	/**
+	 * Colours {@code text} letter by letter, fading from {@code from} to {@code to}. Swing labels
+	 * and buttons take one foreground colour, but render per-character colours in HTML.
+	 */
+	private static String gradientHtml(String text, Color from, Color to)
+	{
+		StringBuilder html = new StringBuilder("<html>");
+		int last = Math.max(text.length() - 1, 1);
+		for (int i = 0; i < text.length(); i++)
+		{
+			float t = (float) i / last;
+			Color color = new Color(
+				Math.round(from.getRed() + (to.getRed() - from.getRed()) * t),
+				Math.round(from.getGreen() + (to.getGreen() - from.getGreen()) * t),
+				Math.round(from.getBlue() + (to.getBlue() - from.getBlue()) * t));
+			char c = text.charAt(i);
+			String escaped = c == '<' ? "&lt;" : c == '>' ? "&gt;" : c == '&' ? "&amp;" : String.valueOf(c);
+			html.append("<span style='color:").append(ColorUtil.toHexColor(color)).append("'>").append(escaped).append("</span>");
+		}
+		return html.append("</html>").toString();
+	}
 
 	/**
 	 * @return the color of the highest-value tier this session's loot total reaches, or null when
@@ -1589,6 +1612,11 @@ public class BossTrackerPanel extends PluginPanel
 
 		Color valueColor = historyValueColor(totalGp);
 		styleButton(expandButton, valueColor != null ? valueColor : Color.WHITE);
+		if (entry.isPetObtained())
+		{
+			expandButton.setText(gradientHtml(expandButton.getText(), valueColor != null ? valueColor : Color.WHITE, PET_GOLD));
+			expandButton.setToolTipText("A pet dropped this session");
+		}
 
 		JButton deleteButton = new JButton("✕");
 		deleteButton.setToolTipText("Delete this session");

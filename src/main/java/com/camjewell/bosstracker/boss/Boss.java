@@ -206,6 +206,12 @@ public enum Boss
 	 */
 	private static final Map<Boss, List<String>> LEGACY_NAMES = new EnumMap<>(Boss.class);
 
+	/**
+	 * Pet items for bosses whose icon isn't their pet. -1 where there's no single pet item: no
+	 * pet at all, or the combined Dagannoth Kings, where the message doesn't say which king's.
+	 */
+	private static final Map<Boss, Integer> PET_ITEM_OVERRIDES = new EnumMap<>(Boss.class);
+
 	static
 	{
 		for (Boss boss : values())
@@ -222,6 +228,13 @@ public enum Boss
 		}
 
 		LEGACY_NAMES.put(GAUNTLET, Collections.singletonList("Corrupted Gauntlet"));
+
+		PET_ITEM_OVERRIDES.put(BARROWS, -1);
+		PET_ITEM_OVERRIDES.put(CRAZY_ARCHAEOLOGIST, -1);
+		PET_ITEM_OVERRIDES.put(DERANGED_ARCHAEOLOGIST, -1);
+		PET_ITEM_OVERRIDES.put(DAGANNOTH_KINGS, -1);
+		PET_ITEM_OVERRIDES.put(CHAOS_FANATIC, ItemID.CHAOSELEPET);
+		PET_ITEM_OVERRIDES.put(THEATRE_OF_BLOOD_HM, ItemID.VERZIKPET);
 
 		// Boss tasks: the assignment names the boss directly.
 		slayerTask("The Phantom Muspah", PHANTOM_MUSPAH);
@@ -315,6 +328,15 @@ public enum Boss
 	public boolean endsTripOnLeavingArea()
 	{
 		return tracksTrips() && this != BARROWS;
+	}
+
+	/**
+	 * @return the item for this boss's pet, recorded as loot when it drops, or -1 if there's no
+	 * single pet item to record. Every other boss's icon is its pet.
+	 */
+	public int getPetItemId()
+	{
+		return PET_ITEM_OVERRIDES.getOrDefault(this, iconItemId);
 	}
 
 	public List<String> getLegacyNames()

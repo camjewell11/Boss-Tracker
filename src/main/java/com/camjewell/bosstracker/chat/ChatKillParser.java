@@ -34,6 +34,17 @@ public final class ChatKillParser
 	}
 
 	/**
+	 * @return true for the game's message to the player that they received a pet: following them,
+	 * sneaking into their backpack, or the "would have been followed" duplicate. Other players'
+	 * broadcasts use their name ("has a funny feeling like she's being followed") and don't match.
+	 */
+	public static boolean isOwnPetMessage(String message)
+	{
+		return message.startsWith("You have a funny feeling like you")
+			|| message.startsWith("You feel something weird sneaking into your backpack");
+	}
+
+	/**
 	 * @return the Boss whose kill-count message appears in this chat line, honoring the
 	 * Dagannoth Kings selector so only the currently-selected king (or the combined "Kings"
 	 * choice) is considered a match, or null if no boss's identifier appears.

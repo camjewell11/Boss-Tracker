@@ -9,6 +9,7 @@ import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.util.ItemPriceCache;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -301,6 +302,25 @@ public class LootTracker
 			loot.setPerfectKills(loot.getPerfectKills() + 1);
 			lootStore.save(accountHash, boss, loot);
 		});
+	}
+
+	/**
+	 * Records a pet as one of the boss's drops. RuneLite never reports pets as loot (they follow
+	 * the player or go straight to the backpack), so the pet message triggers this instead.
+	 */
+	public void recordPetDrop(Boss boss)
+	{
+		int petItemId = boss.getPetItemId();
+		if (petItemId <= 0)
+		{
+			return;
+		}
+		ensureLoaded(boss);
+		priceCache.warm(petItemId);
+		sessionLoot.merge(petItemId, 1, Integer::sum);
+		lifetimeLoot.merge(petItemId, 1, Integer::sum);
+		version++;
+		persistLoot(boss, Collections.singletonList(new ItemStack(petItemId, 1)));
 	}
 
 	private long computeLifetimeGp()

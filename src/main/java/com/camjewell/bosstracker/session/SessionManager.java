@@ -134,6 +134,12 @@ public class SessionManager
 
 	public void onChatMessage(String message, boolean inFightCavesOrInferno)
 	{
+		if (ChatKillParser.isOwnPetMessage(message))
+		{
+			onPetObtained();
+			return;
+		}
+
 		boolean resumedByThisMessage = false;
 		if (session != null && session.isPaused()
 			&& ChatKillParser.isRecognizedBossMessage(message, config.dksSelector(), inFightCavesOrInferno))
@@ -336,6 +342,12 @@ public class SessionManager
 		{
 			session.setOnSlayerTask(true);
 		}
+		if (petMessageAt != null && Duration.between(petMessageAt, Instant.now()).compareTo(PET_MESSAGE_WINDOW) <= 0)
+		{
+			// The pet message arrived before the kill count that created this session.
+			recordPet(boss);
+		}
+		petMessageAt = null;
 
 		recalculateKph();
 		maybeAnnounceKillDuration(boss, durationSeconds);
@@ -350,6 +362,34 @@ public class SessionManager
 	 * name is sufficient to prove a task is active; the remaining count is deliberately not checked,
 	 * because it can already have hit zero by the time the final kill's chat message is parsed.
 	 */
+	/**
+	 * How long a pet message waits for its kill. The two arrive on the same tick, in either
+	 * order, so this only needs to cover that.
+	 */
+	private static final Duration PET_MESSAGE_WINDOW = Duration.ofSeconds(10);
+
+	/** When a pet message arrived that no session had yet claimed, or null. */
+	private Instant petMessageAt;
+
+	private void onPetObtained()
+	{
+		if (session != null)
+		{
+			recordPet(session.getBoss());
+			return;
+		}
+		// On a session's first kill the message can arrive before the kill count that creates
+		// the session; finalizeKill picks it up from here.
+		petMessageAt = Instant.now();
+	}
+
+	private void recordPet(Boss boss)
+	{
+		log.debug("Pet obtained during session for {}", boss);
+		session.setPetObtained(true);
+		lootTracker.recordPetDrop(boss);
+	}
+
 	private boolean isOnSlayerTaskFor(Boss boss)
 	{
 		if (slayerPluginService == null)
@@ -917,6 +957,7 @@ public class SessionManager
 		entry.setFastestKillSeconds(endedSession.getFastestKillSeconds());
 		entry.setIdleSeconds(endedSession.getIdleSeconds());
 		entry.setOnSlayerTask(endedSession.isOnSlayerTask());
+		entry.setPetObtained(endedSession.isPetObtained());
 		entry.setLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionLoot()));
 		// Every trip is closed by now: each path that ends a session closes the open trip first.
 		entry.setTrips(new ArrayList<>(endedSession.getTrips()));

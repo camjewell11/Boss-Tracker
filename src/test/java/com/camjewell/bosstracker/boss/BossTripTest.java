@@ -1,5 +1,6 @@
 package com.camjewell.bosstracker.boss;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
@@ -41,5 +42,15 @@ public class BossTripTest
 		assertTrue(Boss.NEX.tracksTrips());
 		assertTrue(Boss.NIGHTMARE.tracksTrips());
 		assertTrue(Boss.DAGANNOTH_KINGS.tracksTrips());
+	}
+
+	@Test
+	public void petItemsDefaultToTheIconWithExceptions()
+	{
+		assertEquals(Boss.MAD_ANGEL.getIconItemId(), Boss.MAD_ANGEL.getPetItemId());
+		assertEquals(-1, Boss.BARROWS.getPetItemId());
+		assertEquals(-1, Boss.DAGANNOTH_KINGS.getPetItemId());
+		assertEquals(Boss.CHAOS_ELEMENTAL.getIconItemId(), Boss.CHAOS_FANATIC.getPetItemId());
+		assertEquals(Boss.THEATRE_OF_BLOOD.getIconItemId(), Boss.THEATRE_OF_BLOOD_HM.getPetItemId());
 	}
 }

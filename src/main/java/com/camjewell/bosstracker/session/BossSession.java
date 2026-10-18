@@ -49,6 +49,9 @@ public class BossSession
 	 */
 	private boolean onSlayerTask;
 
+	/** Set when the player's own pet-drop message arrives during the session. */
+	private boolean petObtained;
+
 	/** Oldest first; the last one is still open unless a death, bank or the session ended it. */
 	private final List<Trip> trips = new ArrayList<>();
 
