@@ -2,6 +2,7 @@ package com.camjewell.bosstracker.ui;
 
 import com.camjewell.bosstracker.BossTrackerConfig;
 import com.camjewell.bosstracker.boss.Boss;
+import com.camjewell.bosstracker.history.ItemDropSearch;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.lookup.BossLookupManager;
 import com.camjewell.bosstracker.loot.LootBossMatcher;
@@ -36,6 +37,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import javax.inject.Inject;
 import javax.swing.AbstractButton;
@@ -185,6 +187,11 @@ public class BossTrackerPanel extends PluginPanel
 	private int lastRenderedHistoryVersion = -1;
 	private int lastRenderedHistoryHighlight;
 	private int lastRenderedLookupVersion = -1;
+	private int lastRenderedSearchHistoryVersion = -1;
+	private String lastRenderedSearchQuery;
+
+	/** The last query run from the search bar; matched against bosses and saved sessions' items. */
+	private String searchQuery = "";
 
 	/**
 	 * Which History entries are expanded, keyed by {@link SessionHistoryEntry#getEndedAtEpochMilli()}.
@@ -344,10 +351,17 @@ public class BossTrackerPanel extends PluginPanel
 		searchToggleButton.setOpaque(false);
 		searchToggleButton.setContentAreaFilled(false);
 		searchToggleButton.setPreferredSize(new Dimension(24, 24));
-		searchToggleButton.setToolTipText("Look up all-time stats and loot for any boss");
+		searchToggleButton.setToolTipText("Look up a boss's all-time stats, or find which sessions dropped an item");
 		searchToggleButton.addActionListener(e ->
+		{
 			viewCardLayout.show(viewContainer, searchToggleButton.isSelected() ? "search"
-				: (sessionTabButton.isSelected() ? "session" : "history")));
+				: (sessionTabButton.isSelected() ? "session" : "history"));
+			if (searchToggleButton.isSelected())
+			{
+				// Item search reads saved sessions, which otherwise only load with the History tab.
+				historyManager.reload();
+			}
+		});
 
 		row.add(tabRow, BorderLayout.CENTER);
 		row.add(searchToggleButton, BorderLayout.EAST);
@@ -367,7 +381,7 @@ public class BossTrackerPanel extends PluginPanel
 		container.setOpaque(false);
 		container.setBorder(new EmptyBorder(0, 0, 8, 0));
 
-		searchField.setToolTipText("Boss name or alias, e.g. \"cox\", \"vetion\", \"General Graardor\"");
+		searchField.setToolTipText("Boss name or alias (\"cox\", \"General Graardor\"), or an item to find the sessions that dropped it");
 		searchField.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		searchField.setForeground(Color.WHITE);
 		searchField.setCaretColor(Color.WHITE);
@@ -409,13 +423,14 @@ public class BossTrackerPanel extends PluginPanel
 		if (match == null)
 		{
 			lookupManager.clear();
-			searchResultLabel.setText("No boss found matching \"" + query + "\".");
-			refreshSearchPanel();
-			return;
 		}
-
-		searchResultLabel.setText("");
-		lookupManager.lookup(match);
+		else
+		{
+			lookupManager.lookup(match);
+		}
+		searchQuery = query;
+		// Pick up any session saved since the History list last loaded.
+		historyManager.reload();
 		refreshSearchPanel();
 	}
 
@@ -1163,11 +1178,15 @@ public class BossTrackerPanel extends PluginPanel
 
 	private void refreshSearchPanel()
 	{
-		if (lookupManager.getVersion() == lastRenderedLookupVersion)
+		if (lookupManager.getVersion() == lastRenderedLookupVersion
+			&& historyManager.getVersion() == lastRenderedSearchHistoryVersion
+			&& Objects.equals(searchQuery, lastRenderedSearchQuery))
 		{
 			return;
 		}
 		lastRenderedLookupVersion = lookupManager.getVersion();
+		lastRenderedSearchHistoryVersion = historyManager.getVersion();
+		lastRenderedSearchQuery = searchQuery;
 
 		searchResultPanel.removeAll();
 		Boss boss = lookupManager.getBoss();
@@ -1176,8 +1195,104 @@ public class BossTrackerPanel extends PluginPanel
 			searchResultPanel.add(buildLookupResultPanel(boss));
 		}
 
+		List<ItemDropSearch.ItemMatch> itemMatches =
+			ItemDropSearch.search(historyManager.getEntries(), priceCache::getName, searchQuery);
+		if (!itemMatches.isEmpty())
+		{
+			searchResultPanel.add(buildItemSearchResults(itemMatches));
+		}
+
+		if (searchQuery.isEmpty() || boss != null || !itemMatches.isEmpty())
+		{
+			searchResultLabel.setText("");
+		}
+		else
+		{
+			searchResultLabel.setText("No boss or saved drop matches \"" + searchQuery + "\".");
+		}
+
 		searchResultPanel.revalidate();
 		searchResultPanel.repaint();
+	}
+
+	private static final int MAX_ITEM_MATCHES = 10;
+	private static final int MAX_DROPS_PER_ITEM = 25;
+
+	/**
+	 * One block per matching item: its icon, name and totals, then each saved session that
+	 * dropped it, newest first, with the boss, when the session ended, and how many.
+	 */
+	private JPanel buildItemSearchResults(List<ItemDropSearch.ItemMatch> matches)
+	{
+		JPanel results = new JPanel()
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		results.setLayout(new BoxLayout(results, BoxLayout.Y_AXIS));
+		results.setOpaque(false);
+
+		for (ItemDropSearch.ItemMatch match : matches.subList(0, Math.min(matches.size(), MAX_ITEM_MATCHES)))
+		{
+			JPanel block = new JPanel(new BorderLayout(0, 4));
+			block.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+			block.setBorder(new CompoundBorder(new CompoundBorder(new EmptyBorder(0, 0, 4, 0),
+				new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49))), new EmptyBorder(4, 6, 6, 6)));
+
+			JPanel header = new JPanel(new BorderLayout(6, 0));
+			header.setOpaque(false);
+			JLabel iconLabel = new JLabel();
+			itemManager.getImage(match.getItemId()).addTo(iconLabel);
+			int sessions = match.getDrops().size();
+			JLabel nameLabel = new JLabel("<html>" + match.getItemName() + "<br><span style='color:"
+				+ ColorUtil.toHexColor(ColorScheme.LIGHT_GRAY_COLOR) + "'>" + sessions
+				+ (sessions == 1 ? " session · " : " sessions · ") + String.format("%,d", match.getTotalQuantity())
+				+ " total</span></html>");
+			nameLabel.setFont(FontManager.getRunescapeSmallFont());
+			header.add(iconLabel, BorderLayout.WEST);
+			header.add(nameLabel, BorderLayout.CENTER);
+
+			JPanel rows = new JPanel(new GridLayout(0, 1, 0, 2));
+			rows.setOpaque(false);
+			List<ItemDropSearch.Drop> drops = match.getDrops();
+			for (ItemDropSearch.Drop drop : drops.subList(0, Math.min(drops.size(), MAX_DROPS_PER_ITEM)))
+			{
+				SessionHistoryEntry entry = drop.getEntry();
+				JPanel row = new JPanel(new BorderLayout(4, 0));
+				row.setOpaque(false);
+				JLabel where = new JLabel(htmlLabel(HISTORY_DATE_FORMAT.format(Instant.ofEpochMilli(entry.getEndedAtEpochMilli())) + "  ",
+					entry.getBossName()));
+				JLabel quantity = new JLabel("x" + String.format("%,d", drop.getQuantity()));
+				where.setFont(FontManager.getRunescapeSmallFont());
+				quantity.setFont(FontManager.getRunescapeSmallFont());
+				row.add(where, BorderLayout.CENTER);
+				row.add(quantity, BorderLayout.EAST);
+				rows.add(row);
+			}
+			if (drops.size() > MAX_DROPS_PER_ITEM)
+			{
+				JLabel more = new JLabel("+" + (drops.size() - MAX_DROPS_PER_ITEM) + " older sessions");
+				more.setFont(FontManager.getRunescapeSmallFont());
+				more.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+				rows.add(more);
+			}
+
+			block.add(header, BorderLayout.NORTH);
+			block.add(rows, BorderLayout.CENTER);
+			results.add(block);
+		}
+
+		if (matches.size() > MAX_ITEM_MATCHES)
+		{
+			JLabel more = new JLabel((matches.size() - MAX_ITEM_MATCHES) + " more items match; narrow the search to see them.");
+			more.setFont(FontManager.getRunescapeSmallFont());
+			more.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+			results.add(more);
+		}
+		return results;
 	}
 
 	private JPanel buildLookupResultPanel(Boss boss)
