@@ -2,10 +2,12 @@ package com.camjewell.bosstracker.ui;
 
 import com.camjewell.bosstracker.BossTrackerConfig;
 import com.camjewell.bosstracker.boss.Boss;
+import com.camjewell.bosstracker.history.DryStreak;
 import com.camjewell.bosstracker.history.ItemDropSearch;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.lookup.BossLookupManager;
 import com.camjewell.bosstracker.loot.LootBossMatcher;
+import com.camjewell.bosstracker.loot.NotableDrops;
 import com.camjewell.bosstracker.loot.PerfectKillLoot;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.persistence.BossStats;
@@ -30,21 +32,25 @@ import java.awt.Graphics;
 import java.awt.GridLayout;
 import java.awt.image.BufferedImage;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import javax.inject.Inject;
 import javax.swing.AbstractButton;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
+import javax.swing.JComboBox;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -65,7 +71,6 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import net.runelite.api.Skill;
-import net.runelite.api.gameval.ItemID;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.ui.ColorScheme;
@@ -97,6 +102,13 @@ public class BossTrackerPanel extends PluginPanel
 	private static final int LOOT_GRID_COLUMNS = 5;
 	private static final DateTimeFormatter HISTORY_DATE_FORMAT = DateTimeFormatter.ofPattern("MMM d, HH:mm")
 		.withZone(ZoneId.systemDefault());
+	private static final DateTimeFormatter HISTORY_DAY_FORMAT = DateTimeFormatter.ofPattern("EEE, MMM d")
+		.withZone(ZoneId.systemDefault());
+	private static final String ALL_BOSSES = "All bosses";
+	private static final String SORT_NEWEST = "Newest first";
+	private static final String SORT_VALUE = "Highest value";
+	/** The KPH trend in the boss lookup covers at most this many recent sessions. */
+	private static final int KPH_TREND_SESSIONS = 30;
 	private static final ImageIcon SEARCH_ICON = new ImageIcon(ImageUtil.loadImageResource(IconTextField.class, "search.png"));
 
 	private final SessionManager sessionManager;
@@ -185,6 +197,13 @@ public class BossTrackerPanel extends PluginPanel
 	private final JPanel historyViewPanel = new JPanel();
 	private final JPanel historyEntriesPanel = new JPanel();
 	private final JButton historyCollapseAllButton = new JButton("Collapse All");
+	private final JComboBox<String> historyBossFilter = new JComboBox<>(new String[]{ALL_BOSSES});
+	private final JComboBox<String> historySortOrder = new JComboBox<>(new String[]{SORT_NEWEST, SORT_VALUE});
+	private final JToggleButton historyUniquesOnlyButton = createDarkToggleButton("Uniques Only");
+	private final JPanel historyLegendPanel = new JPanel(new GridLayout(1, 0, 2, 0));
+	/** Set while the boss filter's choices are rebuilt, so that doesn't count as the user picking one. */
+	private boolean updatingHistoryFilters;
+	private int lastRenderedHistoryFilter;
 	private final JPanel searchViewPanel = new JPanel();
 	private int lastRenderedHistoryVersion = -1;
 	private int lastRenderedHistoryHighlight;
@@ -969,9 +988,18 @@ public class BossTrackerPanel extends PluginPanel
 
 	private String buildLootTooltip(int itemId, int quantity, double totalValue)
 	{
+		return buildLootTooltip(itemId, quantity, priceCache.getPrice(itemId), totalValue);
+	}
+
+	/**
+	 * @param unitPrice what one is worth here: today's price, or for a saved session, its price
+	 * when it dropped
+	 */
+	private String buildLootTooltip(int itemId, int quantity, long unitPrice, double totalValue)
+	{
 		StringBuilder tooltip = new StringBuilder("<html>")
 			.append(priceCache.getName(itemId)).append(" x ").append(quantity)
-			.append("<br>GP/Item: ").append(GpFormat.exact(priceCache.getPrice(itemId)))
+			.append("<br>GP/Item: ").append(GpFormat.exact(unitPrice))
 			.append("<br>Value: ").append(GpFormat.exact(totalValue));
 
 		long haPrice = priceCache.getHaPrice(itemId);
@@ -1365,6 +1393,19 @@ public class BossTrackerPanel extends PluginPanel
 			detailPanel.add(createStatsPanel(totalKcLabel, killsTrackedLabel, avgKphLabel, fastestKillLabel, totalTrackedTimeLabel));
 		}
 
+		List<SessionHistoryEntry> bossHistory = historyForBoss(boss);
+		BossSession liveSession = sessionManager.getSession();
+		if (!bossHistory.isEmpty() || (liveSession != null && liveSession.getBoss() == boss))
+		{
+			detailPanel.add(Box.createRigidArea(new Dimension(0, 4)));
+			detailPanel.add(buildDryStreakPanel(boss, bossHistory, liveSession));
+		}
+		if (bossHistory.size() >= 2)
+		{
+			detailPanel.add(Box.createRigidArea(new Dimension(0, 6)));
+			detailPanel.add(buildKphTrendPanel(bossHistory));
+		}
+
 		if (!lootMap.isEmpty())
 		{
 			double totalGp = 0;
@@ -1414,31 +1455,133 @@ public class BossTrackerPanel extends PluginPanel
 
 	private static final int HISTORY_VALUE_TIERS = 5;
 
-	/** An item worth at least this much each is a notable drop, so a big stack of cheap items isn't. */
-	private static final long NOTABLE_DROP_UNIT_GP = 1_000_000;
+	/** A boss's saved sessions, including any saved under a name it was merged from. */
+	private List<SessionHistoryEntry> historyForBoss(Boss boss)
+	{
+		List<SessionHistoryEntry> sessions = new ArrayList<>();
+		for (SessionHistoryEntry entry : historyManager.getEntries())
+		{
+			String name = entry.getBossName();
+			if (boss.getBossName().equalsIgnoreCase(name) || boss.getLegacyNames().stream().anyMatch(name::equalsIgnoreCase))
+			{
+				sessions.add(entry);
+			}
+		}
+		return sessions;
+	}
 
 	/**
-	 * Raid cosmetics, always notable whatever their price: several are worth well under the
-	 * threshold or can't be traded at all, but are still rare uniques. In-game names noted,
-	 * since several gameval names don't resemble them.
+	 * Kills since the boss's last unique, counting the live session when it's on this boss. A
+	 * session's kills after its unique aren't known, so the streak restarts at that session.
 	 */
-	private static final Set<Integer> RAID_COSMETICS = new HashSet<>(Arrays.asList(
-		ItemID.ANCESTRAL_ROBES_TWISTED_KIT,     // Twisted ancestral colour kit (CoX)
-		ItemID.RAIDS_CHALLENGE_MORPH,           // Metamorphic dust (CoX)
-		ItemID.TOB_HARDMODE_KIT,                // Holy ornament kit (ToB)
-		ItemID.TOB_HARDMODE_KIT_BLOOD,          // Sanguine ornament kit (ToB)
-		ItemID.TOB_HARDMODE_DUST,               // Sanguine dust (ToB)
-		ItemID.OSMUMTENS_FANG_ORNAMENT_KIT,     // Cursed phalanx (ToA)
-		ItemID.ELIDINIS_WARD_ORNAMENT_KIT,      // Menaphite ornament kit (ToA)
-		ItemID.THREAD_OF_ELIDINIS,              // Thread of Elidinis (ToA)
-		ItemID.EYE_OF_THE_CORRUPTOR,            // Eye of the corruptor (ToA)
-		ItemID.JEWEL_OF_THE_SUN,                // Jewel of the sun (ToA)
-		ItemID.JEWEL_OF_AMASCUT,                // Jewel of amascut (ToA)
-		ItemID.TOA_PET_MORPH_AKKHA,             // Remnant of Akkha (ToA)
-		ItemID.TOA_PET_MORPH_BABA,              // Remnant of Ba-Ba (ToA)
-		ItemID.TOA_PET_MORPH_KEPHRI,            // Remnant of Kephri (ToA)
-		ItemID.TOA_PET_MORPH_ZEBAK,             // Remnant of Zebak (ToA)
-		ItemID.TOA_PET_MORPH_WARDENS));         // Ancient remnant (ToA)
+	private JPanel buildDryStreakPanel(Boss boss, List<SessionHistoryEntry> bossHistory, BossSession liveSession)
+	{
+		DryStreak streak = DryStreak.compute(bossHistory,
+			(entry, itemId) -> NotableDrops.isNotable(boss, itemId, historyPrice(entry, itemId)));
+
+		String dryText;
+		if (liveSession != null && liveSession.getBoss() == boss)
+		{
+			boolean uniqueThisSession = false;
+			for (int itemId : lootTracker.getSessionLoot().keySet())
+			{
+				uniqueThisSession |= NotableDrops.isNotable(boss, itemId, priceCache.getPrice(itemId));
+			}
+			dryText = uniqueThisSession ? "Unique this session"
+				: (streak.getKills() + liveSession.getKillsThisSession()) + " kills";
+		}
+		else
+		{
+			dryText = streak.getKills() + " kills";
+		}
+
+		String lastText = streak.hasUnique()
+			? priceCache.getName(streak.getLastUniqueItemId()) + " ("
+				+ HISTORY_DAY_FORMAT.format(Instant.ofEpochMilli(streak.getLastUniqueAtEpochMilli())) + ")"
+			: "None in saved sessions";
+		JLabel dryLabel = new JLabel(htmlLabel("Dry Streak: ", dryText));
+		JLabel lastLabel = new JLabel(htmlLabel("Last Unique: ", lastText));
+		dryLabel.setToolTipText("Kills since a pet, raid cosmetic, or drop worth 1m+ each, from saved sessions");
+		return createStatsPanel(dryLabel, lastLabel);
+	}
+
+	/** KPH across the boss's recent sessions, oldest on the left. */
+	private JPanel buildKphTrendPanel(List<SessionHistoryEntry> bossHistory)
+	{
+		List<SessionHistoryEntry> oldestFirst = new ArrayList<>(bossHistory);
+		oldestFirst.sort(Comparator.comparingLong(SessionHistoryEntry::getEndedAtEpochMilli));
+		List<SessionHistoryEntry> recent = oldestFirst.subList(Math.max(0, oldestFirst.size() - KPH_TREND_SESSIONS), oldestFirst.size());
+		double[] kph = new double[recent.size()];
+		for (int i = 0; i < kph.length; i++)
+		{
+			kph[i] = recent.get(i).getKillsPerHour();
+		}
+
+		JLabel label = new JLabel(htmlLabel("KPH Trend: ", String.format("%.1f → %.1f (last %d sessions)",
+			kph[0], kph[kph.length - 1], kph.length)));
+		JPanel panel = new JPanel(new BorderLayout(0, 2))
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		panel.setOpaque(false);
+		panel.add(label, BorderLayout.NORTH);
+		panel.add(new Sparkline(kph, ACTIVE_COLOR), BorderLayout.CENTER);
+		return panel;
+	}
+
+	/**
+	 * A saved session's price for an item: what it was worth when it dropped, or today's price for
+	 * sessions saved before drop prices were recorded.
+	 */
+	private long historyPrice(SessionHistoryEntry entry, int itemId)
+	{
+		Long atDrop = entry.getItemPricesAtDrop() != null ? entry.getItemPricesAtDrop().get(itemId) : null;
+		return atDrop != null ? atDrop : priceCache.getPrice(itemId);
+	}
+
+	/** A saved session's regular loot value, used for its row colour, sorting and day totals. */
+	private double historyLootValue(SessionHistoryEntry entry)
+	{
+		double total = 0;
+		for (Map.Entry<Integer, Integer> item : entry.getLootItemQuantities().entrySet())
+		{
+			total += (double) historyPrice(entry, item.getKey()) * item.getValue();
+		}
+		return total;
+	}
+
+	/** The session's regular and minion loot combined, which is where uniques can come from. */
+	private static Map<Integer, Integer> uniqueCandidates(SessionHistoryEntry entry)
+	{
+		Map<Integer, Integer> loot = new LinkedHashMap<>();
+		entry.getLootItemQuantities().forEach((id, qty) -> loot.merge(id, qty, Integer::sum));
+		if (entry.getMinionLootItemQuantities() != null)
+		{
+			entry.getMinionLootItemQuantities().forEach((id, qty) -> loot.merge(id, qty, Integer::sum));
+		}
+		return loot;
+	}
+
+	private boolean hasNotableDrop(SessionHistoryEntry entry)
+	{
+		if (entry.isPetObtained())
+		{
+			return true;
+		}
+		Boss boss = Boss.byNameOrAlias(entry.getBossName());
+		for (int itemId : uniqueCandidates(entry).keySet())
+		{
+			if (NotableDrops.isNotable(boss, itemId, historyPrice(entry, itemId)))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 
 	/**
 	 * Hover text for a History row naming its pets and high-value drops, so a session's uniques
@@ -1447,26 +1590,19 @@ public class BossTrackerPanel extends PluginPanel
 	private String buildNotableDropsTooltip(SessionHistoryEntry entry)
 	{
 		Boss boss = Boss.byNameOrAlias(entry.getBossName());
-		int petItemId = boss != null ? boss.getPetItemId() : -1;
-
-		Map<Integer, Integer> loot = new LinkedHashMap<>();
-		entry.getLootItemQuantities().forEach((id, qty) -> loot.merge(id, qty, Integer::sum));
-		if (entry.getMinionLootItemQuantities() != null)
-		{
-			entry.getMinionLootItemQuantities().forEach((id, qty) -> loot.merge(id, qty, Integer::sum));
-		}
+		Map<Integer, Integer> loot = uniqueCandidates(entry);
 
 		List<String> pets = new ArrayList<>();
 		List<Integer> valuable = new ArrayList<>();
 		for (Map.Entry<Integer, Integer> item : loot.entrySet())
 		{
 			int itemId = item.getKey();
-			if (itemId == petItemId)
+			if (NotableDrops.isPet(boss, itemId))
 			{
 				int count = item.getValue();
 				pets.add(priceCache.getName(itemId) + (count > 1 ? " x" + count : "") + " (pet)");
 			}
-			else if (priceCache.getPrice(itemId) >= NOTABLE_DROP_UNIT_GP || RAID_COSMETICS.contains(itemId))
+			else if (NotableDrops.isNotable(boss, itemId, historyPrice(entry, itemId)))
 			{
 				valuable.add(itemId);
 			}
@@ -1481,7 +1617,7 @@ public class BossTrackerPanel extends PluginPanel
 			return null;
 		}
 
-		valuable.sort((a, b) -> Long.compare(priceCache.getPrice(b) * loot.get(b), priceCache.getPrice(a) * loot.get(a)));
+		valuable.sort(Comparator.comparingLong((Integer id) -> historyPrice(entry, id) * loot.get(id)).reversed());
 		StringBuilder tooltip = new StringBuilder("<html>Notable drops:");
 		for (String pet : pets)
 		{
@@ -1490,7 +1626,7 @@ public class BossTrackerPanel extends PluginPanel
 		for (int itemId : valuable)
 		{
 			int quantity = loot.get(itemId);
-			long value = priceCache.getPrice(itemId) * quantity;
+			long value = historyPrice(entry, itemId) * quantity;
 			tooltip.append("<br>").append(priceCache.getName(itemId)).append(quantity > 1 ? " x" + quantity : "");
 			if (value > 0)
 			{
@@ -1500,6 +1636,7 @@ public class BossTrackerPanel extends PluginPanel
 		}
 		return tooltip.append("</html>").toString();
 	}
+
 	private static final Color PET_GOLD = new Color(0xFFD700);
 
 	/**
@@ -1606,32 +1743,63 @@ public class BossTrackerPanel extends PluginPanel
 
 	private void refreshHistoryPanel()
 	{
-		// The entry list itself is unchanged when only the highlight settings are edited, so the
-		// version check alone would leave the rows showing their old colors until the next reload.
+		// The entry list itself is unchanged when only the highlight settings or filters change,
+		// so the version check alone would leave the rows showing stale colours or sessions.
 		int highlightSignature = historyHighlightSignature();
-		if (historyManager.getVersion() == lastRenderedHistoryVersion
-			&& highlightSignature == lastRenderedHistoryHighlight)
+		int filterSignature = Objects.hash(historyBossFilter.getSelectedItem(), historySortOrder.getSelectedItem(),
+			historyUniquesOnlyButton.isSelected());
+		boolean entriesChanged = historyManager.getVersion() != lastRenderedHistoryVersion;
+		if (!entriesChanged && highlightSignature == lastRenderedHistoryHighlight
+			&& filterSignature == lastRenderedHistoryFilter)
 		{
 			return;
 		}
 		lastRenderedHistoryVersion = historyManager.getVersion();
 		lastRenderedHistoryHighlight = highlightSignature;
+		lastRenderedHistoryFilter = filterSignature;
+
+		List<SessionHistoryEntry> entries = historyManager.getEntries();
+		if (entriesChanged)
+		{
+			updateHistoryBossFilter(entries);
+		}
+		refreshHistoryLegend();
 
 		historyEntriesPanel.removeAll();
-		List<SessionHistoryEntry> entries = historyManager.getEntries();
-		if (entries.isEmpty())
+		List<SessionHistoryEntry> shown = filterHistory(entries);
+		if (entries.isEmpty() || shown.isEmpty())
 		{
-			JLabel emptyLabel = new JLabel("No session history yet.");
+			JLabel emptyLabel = new JLabel(entries.isEmpty() ? "No session history yet." : "No sessions match these filters.");
 			emptyLabel.setHorizontalAlignment(SwingConstants.CENTER);
 			emptyLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 			emptyLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
 			historyEntriesPanel.add(emptyLabel);
 		}
-		else
+		else if (SORT_VALUE.equals(historySortOrder.getSelectedItem()))
 		{
-			for (SessionHistoryEntry entry : entries)
+			shown.sort(Comparator.comparingDouble(this::historyLootValue).reversed());
+			for (SessionHistoryEntry entry : shown)
 			{
 				historyEntriesPanel.add(buildHistoryEntryPanel(entry));
+			}
+		}
+		else
+		{
+			// Newest first, grouped by the day each session ended.
+			shown.sort(Comparator.comparingLong(SessionHistoryEntry::getEndedAtEpochMilli).reversed());
+			Map<LocalDate, List<SessionHistoryEntry>> days = new LinkedHashMap<>();
+			for (SessionHistoryEntry entry : shown)
+			{
+				LocalDate day = Instant.ofEpochMilli(entry.getEndedAtEpochMilli()).atZone(ZoneId.systemDefault()).toLocalDate();
+				days.computeIfAbsent(day, d -> new ArrayList<>()).add(entry);
+			}
+			for (List<SessionHistoryEntry> day : days.values())
+			{
+				historyEntriesPanel.add(buildHistoryDayHeader(day));
+				for (SessionHistoryEntry entry : day)
+				{
+					historyEntriesPanel.add(buildHistoryEntryPanel(entry));
+				}
 			}
 		}
 
@@ -1639,9 +1807,61 @@ public class BossTrackerPanel extends PluginPanel
 		historyEntriesPanel.repaint();
 	}
 
-	private JPanel buildHistoryHeaderRow()
+	private List<SessionHistoryEntry> filterHistory(List<SessionHistoryEntry> entries)
 	{
-		JPanel row = new JPanel(new BorderLayout())
+		Object boss = historyBossFilter.getSelectedItem();
+		boolean uniquesOnly = historyUniquesOnlyButton.isSelected();
+		List<SessionHistoryEntry> shown = new ArrayList<>();
+		for (SessionHistoryEntry entry : entries)
+		{
+			if (boss != null && !ALL_BOSSES.equals(boss) && !boss.equals(entry.getBossName()))
+			{
+				continue;
+			}
+			if (uniquesOnly && !hasNotableDrop(entry))
+			{
+				continue;
+			}
+			shown.add(entry);
+		}
+		return shown;
+	}
+
+	/** Offers every boss with a saved session, keeping the current choice where it still exists. */
+	private void updateHistoryBossFilter(List<SessionHistoryEntry> entries)
+	{
+		Set<String> bossNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+		for (SessionHistoryEntry entry : entries)
+		{
+			bossNames.add(entry.getBossName());
+		}
+
+		Object selected = historyBossFilter.getSelectedItem();
+		updatingHistoryFilters = true;
+		historyBossFilter.removeAllItems();
+		historyBossFilter.addItem(ALL_BOSSES);
+		for (String name : bossNames)
+		{
+			historyBossFilter.addItem(name);
+		}
+		historyBossFilter.setSelectedItem(selected != null && bossNames.contains(selected.toString()) ? selected : ALL_BOSSES);
+		updatingHistoryFilters = false;
+		lastRenderedHistoryFilter = Objects.hash(historyBossFilter.getSelectedItem(), historySortOrder.getSelectedItem(),
+			historyUniquesOnlyButton.isSelected());
+	}
+
+	private JPanel buildHistoryDayHeader(List<SessionHistoryEntry> day)
+	{
+		double total = 0;
+		for (SessionHistoryEntry entry : day)
+		{
+			total += historyLootValue(entry);
+		}
+		JLabel label = new JLabel(htmlLabel(HISTORY_DAY_FORMAT.format(Instant.ofEpochMilli(day.get(0).getEndedAtEpochMilli())) + "  ",
+			day.size() + (day.size() == 1 ? " session · " : " sessions · ") + GpFormat.abbreviated(total)));
+		label.setFont(FontManager.getRunescapeSmallFont());
+
+		JPanel header = new JPanel(new BorderLayout())
 		{
 			@Override
 			public Dimension getMaximumSize()
@@ -1649,8 +1869,88 @@ public class BossTrackerPanel extends PluginPanel
 				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
 			}
 		};
-		row.setOpaque(false);
-		row.setBorder(new EmptyBorder(0, 0, 4, 0));
+		header.setOpaque(false);
+		header.setBorder(new EmptyBorder(6, 2, 3, 2));
+		header.add(label, BorderLayout.CENTER);
+		return header;
+	}
+
+	/** One label per value tier in its own colour, then "Pet" in gold, when highlighting is on. */
+	private void refreshHistoryLegend()
+	{
+		historyLegendPanel.removeAll();
+		if (!config.highlightHistoryByValue())
+		{
+			historyLegendPanel.setVisible(false);
+			return;
+		}
+
+		List<Integer> tiers = new ArrayList<>();
+		for (int tier = 1; tier <= HISTORY_VALUE_TIERS; tier++)
+		{
+			if (GpValue.parse(historyTierValue(tier)) != GpValue.INVALID)
+			{
+				tiers.add(tier);
+			}
+		}
+		tiers.sort(Comparator.comparingLong(tier -> GpValue.parse(historyTierValue(tier))));
+		for (int tier : tiers)
+		{
+			historyLegendPanel.add(legendLabel(historyTierValue(tier).trim() + "+", historyTierColor(tier)));
+		}
+		historyLegendPanel.add(legendLabel("Pet", PET_GOLD));
+		historyLegendPanel.setToolTipText("Row colours: the highest tier a session's loot reaches. A fade into gold means a pet dropped.");
+		historyLegendPanel.setVisible(true);
+		historyLegendPanel.revalidate();
+	}
+
+	private static JLabel legendLabel(String text, Color color)
+	{
+		JLabel label = new JLabel(text, SwingConstants.CENTER);
+		label.setFont(FontManager.getRunescapeSmallFont());
+		label.setForeground(color);
+		return label;
+	}
+
+	private JPanel buildHistoryHeaderRow()
+	{
+		JPanel header = new JPanel()
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+		header.setOpaque(false);
+		header.setBorder(new EmptyBorder(0, 0, 4, 0));
+
+		for (JComboBox<String> combo : Arrays.asList(historyBossFilter, historySortOrder))
+		{
+			combo.setFont(FontManager.getRunescapeSmallFont());
+			combo.setFocusable(false);
+		}
+		historyBossFilter.setToolTipText("Show one boss's sessions");
+		historySortOrder.setToolTipText("Newest first groups sessions by day");
+		historyBossFilter.addActionListener(e ->
+		{
+			if (!updatingHistoryFilters)
+			{
+				refreshHistoryPanel();
+			}
+		});
+		historySortOrder.addActionListener(e -> refreshHistoryPanel());
+
+		JPanel filterRow = new JPanel(new GridLayout(1, 2, 4, 0));
+		filterRow.setOpaque(false);
+		filterRow.add(historyBossFilter);
+		filterRow.add(historySortOrder);
+
+		styleButton(historyUniquesOnlyButton);
+		historyUniquesOnlyButton.setFont(FontManager.getRunescapeSmallFont());
+		historyUniquesOnlyButton.setToolTipText("Only sessions with a pet, a raid cosmetic, or a drop worth 1m+ each");
+		historyUniquesOnlyButton.addActionListener(e -> refreshHistoryPanel());
 
 		styleButton(historyCollapseAllButton);
 		historyCollapseAllButton.setFont(FontManager.getRunescapeSmallFont());
@@ -1662,8 +1962,31 @@ public class BossTrackerPanel extends PluginPanel
 			refreshHistoryPanel();
 		});
 
-		row.add(historyCollapseAllButton, BorderLayout.CENTER);
-		return row;
+		JPanel buttonRow = new JPanel(new GridLayout(1, 2, 4, 0));
+		buttonRow.setOpaque(false);
+		buttonRow.add(historyUniquesOnlyButton);
+		buttonRow.add(historyCollapseAllButton);
+
+		historyLegendPanel.setOpaque(false);
+		historyLegendPanel.setBorder(new EmptyBorder(4, 0, 0, 0));
+
+		header.add(filterRow);
+		header.add(Box.createRigidArea(new Dimension(0, 4)));
+		header.add(buttonRow);
+		header.add(historyLegendPanel);
+		return header;
+	}
+
+	/** A boss's icon shrunk to fit a History row. */
+	private JLabel smallBossIcon(Boss boss)
+	{
+		JLabel label = new JLabel();
+		label.setBorder(new EmptyBorder(0, 4, 0, 2));
+		AsyncBufferedImage image = itemManager.getImage(boss.getIconItemId());
+		Runnable apply = () -> label.setIcon(new ImageIcon(ImageUtil.resizeImage(image, 18, 16)));
+		image.onLoaded(apply);
+		apply.run();
+		return label;
 	}
 
 	private JPanel buildHistoryEntryPanel(SessionHistoryEntry entry)
@@ -1689,7 +2012,7 @@ public class BossTrackerPanel extends PluginPanel
 		double totalGp = 0;
 		for (Map.Entry<Integer, Integer> item : entry.getLootItemQuantities().entrySet())
 		{
-			double value = (double) priceCache.getPrice(item.getKey()) * item.getValue();
+			double value = (double) historyPrice(entry, item.getKey()) * item.getValue();
 			valueByItem.put(item.getKey(), value);
 			totalGp += value;
 		}
@@ -1736,6 +2059,11 @@ public class BossTrackerPanel extends PluginPanel
 		}
 		eastControls.add(deleteButton, BorderLayout.EAST);
 
+		Boss rowBoss = Boss.byNameOrAlias(entry.getBossName());
+		if (rowBoss != null)
+		{
+			headerRow.add(smallBossIcon(rowBoss), BorderLayout.WEST);
+		}
 		headerRow.add(expandButton, BorderLayout.CENTER);
 		headerRow.add(eastControls, BorderLayout.EAST);
 
@@ -1763,7 +2091,7 @@ public class BossTrackerPanel extends PluginPanel
 
 		if (entry.getTrips() != null && !entry.getTrips().isEmpty())
 		{
-			detailPanel.add(buildTripsSection(entry.getTrips()));
+			detailPanel.add(buildTripsSection(entry, entry.getTrips()));
 			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
 		}
 
@@ -1789,6 +2117,18 @@ public class BossTrackerPanel extends PluginPanel
 			lootStatsRow.add(gpPerKillLabel);
 			lootStatsRow.add(totalGpLabel);
 			lootSection.add(lootStatsRow);
+			if (entry.getItemPricesAtDrop() == null || entry.getItemPricesAtDrop().isEmpty())
+			{
+				// Wrapped so it shares the stats row's alignment within this BoxLayout.
+				JLabel priceNote = new JLabel("Valued at today's prices (saved before drop prices were kept)");
+				priceNote.setFont(FontManager.getRunescapeSmallFont());
+				priceNote.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+				JPanel priceNoteRow = new JPanel(new BorderLayout());
+				priceNoteRow.setOpaque(false);
+				priceNoteRow.setBorder(new EmptyBorder(4, 0, 0, 0));
+				priceNoteRow.add(priceNote, BorderLayout.CENTER);
+				lootSection.add(priceNoteRow);
+			}
 			lootSection.add(Box.createRigidArea(new Dimension(0, 10)));
 
 			JPanel lootGrid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
@@ -1798,7 +2138,7 @@ public class BossTrackerPanel extends PluginPanel
 				int quantity = entry.getLootItemQuantities().get(itemId);
 				JLabel itemLabel = new JLabel();
 				itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
-				itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, valueByItem.get(itemId)));
+				itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, historyPrice(entry, itemId), valueByItem.get(itemId)));
 				itemManager.getImage(itemId, quantity, quantity > 1).addTo(itemLabel);
 
 				JPanel slot = new JPanel(new BorderLayout());
@@ -1815,13 +2155,13 @@ public class BossTrackerPanel extends PluginPanel
 		if (entry.getMinionLootItemQuantities() != null && !entry.getMinionLootItemQuantities().isEmpty())
 		{
 			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
-			detailPanel.add(buildHistoryExtraSection(entry.getMinionLootItemQuantities(),
+			detailPanel.add(buildHistoryExtraSection(entry, entry.getMinionLootItemQuantities(),
 				"Minion Kills", entry.getMinionKills(), "Minion GP"));
 		}
 		if (entry.getPerfectBonusItemQuantities() != null && !entry.getPerfectBonusItemQuantities().isEmpty())
 		{
 			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
-			detailPanel.add(buildHistoryExtraSection(entry.getPerfectBonusItemQuantities(),
+			detailPanel.add(buildHistoryExtraSection(entry, entry.getPerfectBonusItemQuantities(),
 				"Perfect Kills", entry.getPerfectKills(), "Bonus GP"));
 		}
 
@@ -1851,13 +2191,14 @@ public class BossTrackerPanel extends PluginPanel
 	 * A saved session's minion drops or perfect-kill bonus, laid out like its loot section: kills
 	 * and total value, then the items, highest value first.
 	 */
-	private JPanel buildHistoryExtraSection(Map<Integer, Integer> extraLoot, String killsKey, int kills, String gpKey)
+	private JPanel buildHistoryExtraSection(SessionHistoryEntry entry, Map<Integer, Integer> extraLoot, String killsKey,
+		int kills, String gpKey)
 	{
 		Map<Integer, Double> valueByItem = new LinkedHashMap<>();
 		double totalGp = 0;
 		for (Map.Entry<Integer, Integer> item : extraLoot.entrySet())
 		{
-			double value = (double) priceCache.getPrice(item.getKey()) * item.getValue();
+			double value = (double) historyPrice(entry, item.getKey()) * item.getValue();
 			valueByItem.put(item.getKey(), value);
 			totalGp += value;
 		}
@@ -1889,7 +2230,7 @@ public class BossTrackerPanel extends PluginPanel
 			int quantity = extraLoot.get(itemId);
 			JLabel itemLabel = new JLabel();
 			itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
-			itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, valueByItem.get(itemId)));
+			itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, historyPrice(entry, itemId), valueByItem.get(itemId)));
 			itemManager.getImage(itemId, quantity, quantity > 1).addTo(itemLabel);
 
 			JPanel slot = new JPanel(new BorderLayout());
@@ -1907,7 +2248,7 @@ public class BossTrackerPanel extends PluginPanel
 	 * One two-line row per trip: kills and duration on top, loot value and how it ended beneath.
 	 * Per-trip loot grids are left out; nested expandable rows don't fit the panel's width.
 	 */
-	private JPanel buildTripsSection(List<Trip> trips)
+	private JPanel buildTripsSection(SessionHistoryEntry entry, List<Trip> trips)
 	{
 		// Fill the row's width like createStatsPanel does; at its preferred width BoxLayout would
 		// centre it and narrow its labels enough to wrap.
@@ -1950,7 +2291,7 @@ public class BossTrackerPanel extends PluginPanel
 			summary.setAlignmentX(Component.LEFT_ALIGNMENT);
 			section.add(summary);
 
-			JLabel outcome = new JLabel(formatTripOutcome(trip));
+			JLabel outcome = new JLabel(formatTripOutcome(entry, trip));
 			outcome.setFont(FontManager.getRunescapeSmallFont());
 			outcome.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 			outcome.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1967,12 +2308,12 @@ public class BossTrackerPanel extends PluginPanel
 		return "#" + number + " · " + trip.getKills() + (trip.getKills() == 1 ? " kill" : " kills") + " · " + duration;
 	}
 
-	private String formatTripOutcome(Trip trip)
+	private String formatTripOutcome(SessionHistoryEntry entry, Trip trip)
 	{
 		double gp = 0;
 		for (Map.Entry<Integer, Integer> item : trip.getLootItemQuantities().entrySet())
 		{
-			gp += (double) priceCache.getPrice(item.getKey()) * item.getValue();
+			gp += (double) historyPrice(entry, item.getKey()) * item.getValue();
 		}
 		return GpFormat.abbreviated(gp) + " · " + describeEndReason(trip.getEndReason());
 	}
