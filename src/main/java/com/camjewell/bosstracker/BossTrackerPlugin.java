@@ -1,6 +1,7 @@
 package com.camjewell.bosstracker;
 
 import com.camjewell.bosstracker.boss.Boss;
+import com.camjewell.bosstracker.capture.UnrecognisedActivityCapture;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.lookup.BossLookupManager;
 import com.camjewell.bosstracker.persistence.TripEndReason;
@@ -115,6 +116,9 @@ public class BossTrackerPlugin extends Plugin
 	@Inject
 	private BossGoalOverlay goalOverlay;
 
+	@Inject
+	private UnrecognisedActivityCapture unrecognisedCapture;
+
 	private ScheduledExecutorService executor;
 	private NavigationButton navButton;
 	private BufferedImage icon;
@@ -138,6 +142,7 @@ public class BossTrackerPlugin extends Plugin
 		areaTracker.setAsyncExecutor(executor);
 		historyManager.setAsyncExecutor(executor);
 		lookupManager.setAsyncExecutor(executor);
+		unrecognisedCapture.setAsyncExecutor(executor);
 
 		chatCommandManager.registerCommandAsync("!Info", this::infoCommand);
 		chatCommandManager.registerCommandAsync("!End", this::endCommand);
@@ -278,6 +283,7 @@ public class BossTrackerPlugin extends Plugin
 			|| Arrays.equals(mapRegions, INFERNO_REGION);
 
 		sessionManager.onChatMessage(chatMessage.getMessage(), inFightCavesOrInferno);
+		unrecognisedCapture.onChatMessage(chatMessage.getMessage());
 		syncUi();
 	}
 
@@ -307,6 +313,7 @@ public class BossTrackerPlugin extends Plugin
 		{
 			sessionManager.onTripLoot(bossLoot);
 		}
+		unrecognisedCapture.onLootReceived(event.getName(), event.getType().name(), event.getItems());
 		panel.requestRefresh();
 	}
 
@@ -323,6 +330,7 @@ public class BossTrackerPlugin extends Plugin
 	@Subscribe
 	public void onWidgetLoaded(WidgetLoaded event)
 	{
+		unrecognisedCapture.onWidgetLoaded(event.getGroupId());
 		if (event.getGroupId() == InterfaceID.BANKMAIN || event.getGroupId() == InterfaceID.BANK_DEPOSITBOX)
 		{
 			sessionManager.endTrip(TripEndReason.BANKED);
