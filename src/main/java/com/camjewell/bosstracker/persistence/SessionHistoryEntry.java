@@ -45,4 +45,11 @@ public class SessionHistoryEntry
 	private Map<Integer, Integer> perfectBonusItemQuantities = new LinkedHashMap<>();
 
 	private int perfectKills;
+
+	/**
+	 * Each item's price when it dropped, so a saved session keeps the value it had at the time
+	 * instead of moving with the Grand Exchange. Empty for sessions saved before this was
+	 * recorded, which fall back to current prices.
+	 */
+	private Map<Integer, Long> itemPricesAtDrop = new LinkedHashMap<>();
 }

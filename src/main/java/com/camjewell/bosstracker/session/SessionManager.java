@@ -965,6 +965,7 @@ public class SessionManager
 		entry.setMinionKills(lootTracker.getSessionMinionKills());
 		entry.setPerfectBonusItemQuantities(new LinkedHashMap<>(lootTracker.getSessionPerfectBonusLoot()));
 		entry.setPerfectKills(lootTracker.getSessionPerfectKills());
+		entry.setItemPricesAtDrop(new LinkedHashMap<>(lootTracker.getSessionDropPrices()));
 		return entry;
 	}
 }

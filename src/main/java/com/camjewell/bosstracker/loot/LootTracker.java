@@ -84,6 +84,10 @@ public class LootTracker
 	@Getter
 	private int sessionPerfectKills;
 
+	/** Each item's price when it last dropped this session, saved with the session in History. */
+	@Getter
+	private final Map<Integer, Long> sessionDropPrices = new LinkedHashMap<>();
+
 	@Getter
 	private int lifetimePerfectKills;
 
@@ -132,6 +136,7 @@ public class LootTracker
 		sessionMinionKills = 0;
 		sessionPerfectBonusLoot.clear();
 		sessionPerfectKills = 0;
+		sessionDropPrices.clear();
 		trackedBoss = null;
 		ensureLoaded(boss);
 	}
@@ -255,6 +260,10 @@ public class LootTracker
 			}
 		}
 
+		for (ItemStack stack : items)
+		{
+			sessionDropPrices.put(stack.getId(), priceCache.getPrice(stack.getId()));
+		}
 		for (ItemStack stack : bossItems)
 		{
 			sessionLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
@@ -317,6 +326,7 @@ public class LootTracker
 		}
 		ensureLoaded(boss);
 		priceCache.warm(petItemId);
+		sessionDropPrices.put(petItemId, priceCache.getPrice(petItemId));
 		sessionLoot.merge(petItemId, 1, Integer::sum);
 		lifetimeLoot.merge(petItemId, 1, Integer::sum);
 		version++;
@@ -373,6 +383,7 @@ public class LootTracker
 			sessionMinionLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
 			lifetimeMinionLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
 			priceCache.warm(stack.getId());
+			sessionDropPrices.put(stack.getId(), priceCache.getPrice(stack.getId()));
 		}
 		sessionMinionKills++;
 		lifetimeMinionKills++;
