@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
 import javax.swing.AbstractButton;
 import javax.swing.Box;
@@ -66,6 +67,7 @@ import javax.swing.JToggleButton;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
@@ -1111,6 +1113,36 @@ public class BossTrackerPanel extends PluginPanel
 	 * Refreshes all labels, the icon, and button text from current session state. Must be
 	 * called on the EDT.
 	 */
+	/** Set while a refresh is queued on the Swing thread, so bursts of events queue only one. */
+	private final AtomicBoolean refreshQueued = new AtomicBoolean();
+
+	/**
+	 * Asks for a refresh from any thread. The plugin calls this every game tick and after chat
+	 * and loot events; queuing at most one at a time keeps a burst of chat messages from piling
+	 * up refreshes, and none run while the panel is closed. {@link #onActivate} catches up when
+	 * it opens.
+	 */
+	public void requestRefresh()
+	{
+		if (refreshQueued.compareAndSet(false, true))
+		{
+			SwingUtilities.invokeLater(() ->
+			{
+				refreshQueued.set(false);
+				if (isShowing())
+				{
+					refresh();
+				}
+			});
+		}
+	}
+
+	@Override
+	public void onActivate()
+	{
+		refresh();
+	}
+
 	public void refresh()
 	{
 		BossSession session = sessionManager.getSession();
@@ -2076,6 +2108,51 @@ public class BossTrackerPanel extends PluginPanel
 		headerContainer.add(headerRow, BorderLayout.NORTH);
 		headerContainer.add(dateLabel, BorderLayout.SOUTH);
 
+		// Built on first expand: most rows are never opened, and building every row's loot grid,
+		// trips and sections up front made each History rebuild cost hundreds of components.
+		JPanel detailHolder = new JPanel(new BorderLayout());
+		detailHolder.setOpaque(false);
+		double sessionGp = totalGp;
+		Runnable buildDetails = () ->
+		{
+			if (detailHolder.getComponentCount() == 0)
+			{
+				detailHolder.add(buildHistoryDetailPanel(entry, valueByItem, sessionGp), BorderLayout.CENTER);
+			}
+		};
+		if (expandButton.isSelected())
+		{
+			buildDetails.run();
+		}
+		detailHolder.setVisible(expandButton.isSelected());
+		expandButton.addActionListener(e ->
+		{
+			boolean expanded = expandButton.isSelected();
+			if (expanded)
+			{
+				buildDetails.run();
+			}
+			detailHolder.setVisible(expanded);
+			if (expanded)
+			{
+				expandedHistoryEntryIds.add(entry.getEndedAtEpochMilli());
+			}
+			else
+			{
+				expandedHistoryEntryIds.remove(entry.getEndedAtEpochMilli());
+			}
+			historyViewPanel.revalidate();
+			historyViewPanel.repaint();
+		});
+
+		entryPanel.add(headerContainer, BorderLayout.NORTH);
+		entryPanel.add(detailHolder, BorderLayout.CENTER);
+		return entryPanel;
+	}
+
+	/** An expanded History row: the session's stats, trips, loot and extra loot sections. */
+	private JPanel buildHistoryDetailPanel(SessionHistoryEntry entry, Map<Integer, Double> valueByItem, double totalGp)
+	{
 		JPanel detailPanel = new JPanel();
 		detailPanel.setLayout(new BoxLayout(detailPanel, BoxLayout.Y_AXIS));
 		detailPanel.setOpaque(false);
@@ -2165,26 +2242,7 @@ public class BossTrackerPanel extends PluginPanel
 				"Perfect Kills", entry.getPerfectKills(), "Bonus GP"));
 		}
 
-		detailPanel.setVisible(expandButton.isSelected());
-		expandButton.addActionListener(e ->
-		{
-			boolean expanded = expandButton.isSelected();
-			detailPanel.setVisible(expanded);
-			if (expanded)
-			{
-				expandedHistoryEntryIds.add(entry.getEndedAtEpochMilli());
-			}
-			else
-			{
-				expandedHistoryEntryIds.remove(entry.getEndedAtEpochMilli());
-			}
-			historyViewPanel.revalidate();
-			historyViewPanel.repaint();
-		});
-
-		entryPanel.add(headerContainer, BorderLayout.NORTH);
-		entryPanel.add(detailPanel, BorderLayout.CENTER);
-		return entryPanel;
+		return detailPanel;
 	}
 
 	/**

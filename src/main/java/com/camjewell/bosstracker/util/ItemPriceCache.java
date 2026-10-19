@@ -38,6 +38,19 @@ public class ItemPriceCache
 		haPrices.put(itemId, (long) composition.getHaPrice());
 	}
 
+	/**
+	 * Like {@link #warm}, but skips items already cached. For bulk loads (saved sessions, a
+	 * boss's all-time loot), where re-reading every item's composition on the client thread at
+	 * once could stall a frame on slower machines. Must be called from the client thread.
+	 */
+	public void warmIfAbsent(int itemId)
+	{
+		if (!prices.containsKey(itemId))
+		{
+			warm(itemId);
+		}
+	}
+
 	public long getPrice(int itemId)
 	{
 		return prices.getOrDefault(itemId, 0L);

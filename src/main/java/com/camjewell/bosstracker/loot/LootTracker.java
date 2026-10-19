@@ -11,10 +11,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -52,21 +52,27 @@ public class LootTracker
 	@Inject
 	private ItemPriceCache priceCache;
 
+	/*
+	 * Every loot map here is written on the client thread (and the all-time ones on the load
+	 * executor too) while the side panel reads them on the Swing thread, so they're concurrent
+	 * maps: iterating one mid-update can't throw. Nothing relies on their order; the panel sorts
+	 * by value.
+	 */
 	@Getter
-	private final Map<Integer, Integer> sessionLoot = new LinkedHashMap<>();
+	private final Map<Integer, Integer> sessionLoot = new ConcurrentHashMap<>();
 
 	@Getter
-	private final Map<Integer, Integer> lifetimeLoot = new LinkedHashMap<>();
+	private final Map<Integer, Integer> lifetimeLoot = new ConcurrentHashMap<>();
 
 	@Getter
-	private final Set<Integer> ignoredItemIds = new HashSet<>();
+	private final Set<Integer> ignoredItemIds = ConcurrentHashMap.newKeySet();
 
 	/** Minion drops for the tracked boss, kept apart from its own; see LootBossMatcher. */
 	@Getter
-	private final Map<Integer, Integer> sessionMinionLoot = new LinkedHashMap<>();
+	private final Map<Integer, Integer> sessionMinionLoot = new ConcurrentHashMap<>();
 
 	@Getter
-	private final Map<Integer, Integer> lifetimeMinionLoot = new LinkedHashMap<>();
+	private final Map<Integer, Integer> lifetimeMinionLoot = new ConcurrentHashMap<>();
 
 	@Getter
 	private int sessionMinionKills;
@@ -76,17 +82,17 @@ public class LootTracker
 
 	/** Perfect-kill bonus drops for the tracked boss, kept apart from its normal drops. */
 	@Getter
-	private final Map<Integer, Integer> sessionPerfectBonusLoot = new LinkedHashMap<>();
+	private final Map<Integer, Integer> sessionPerfectBonusLoot = new ConcurrentHashMap<>();
 
 	@Getter
-	private final Map<Integer, Integer> lifetimePerfectBonusLoot = new LinkedHashMap<>();
+	private final Map<Integer, Integer> lifetimePerfectBonusLoot = new ConcurrentHashMap<>();
 
 	@Getter
 	private int sessionPerfectKills;
 
 	/** Each item's price when it last dropped this session, saved with the session in History. */
 	@Getter
-	private final Map<Integer, Long> sessionDropPrices = new LinkedHashMap<>();
+	private final Map<Integer, Long> sessionDropPrices = new ConcurrentHashMap<>();
 
 	@Getter
 	private int lifetimePerfectKills;
@@ -196,15 +202,15 @@ public class LootTracker
 				{
 					for (int itemId : loot.getItemQuantities().keySet())
 					{
-						priceCache.warm(itemId);
+						priceCache.warmIfAbsent(itemId);
 					}
 					for (int itemId : loot.getMinionItemQuantities().keySet())
 					{
-						priceCache.warm(itemId);
+						priceCache.warmIfAbsent(itemId);
 					}
 					for (int itemId : loot.getPerfectBonusItemQuantities().keySet())
 					{
-						priceCache.warm(itemId);
+						priceCache.warmIfAbsent(itemId);
 					}
 					version++;
 				});

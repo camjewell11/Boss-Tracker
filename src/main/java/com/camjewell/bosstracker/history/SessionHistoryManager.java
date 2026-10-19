@@ -4,6 +4,7 @@ import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
 import com.camjewell.bosstracker.persistence.SessionHistoryStore;
 import com.camjewell.bosstracker.util.ItemPriceCache;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import javax.inject.Inject;
@@ -33,8 +34,12 @@ public class SessionHistoryManager
 	@Inject
 	private ItemPriceCache priceCache;
 
+	/**
+	 * Replaced whole, never modified in place: the side panel reads it on the Swing thread while
+	 * loads finish on other threads, so it must never be seen half-filled.
+	 */
 	@Getter
-	private final List<SessionHistoryEntry> entries = new ArrayList<>();
+	private volatile List<SessionHistoryEntry> entries = Collections.emptyList();
 
 	@Getter
 	private int version;
@@ -66,31 +71,35 @@ public class SessionHistoryManager
 		long accountHash = client.getAccountHash();
 		asyncExecutor.execute(() ->
 		{
-			List<SessionHistoryEntry> loaded = store.loadAll(accountHash);
-			entries.clear();
-			entries.addAll(loaded);
+			List<SessionHistoryEntry> loaded = Collections.unmodifiableList(store.loadAll(accountHash));
 
-			// See LootTracker.ensureLoaded: warm the price cache on the client thread
-			// before bumping version, since getItemPrice() falls back to a
-			// client-thread-only call when an item isn't already cached.
+			// See LootTracker.ensureLoaded: warm the price cache on the client thread before
+			// publishing, since prices are only read from the cache. Only uncached items, so
+			// reopening History doesn't re-read hundreds of items in a single tick.
 			clientThread.invoke(() ->
 			{
 				for (SessionHistoryEntry entry : loaded)
 				{
 					for (int itemId : entry.getLootItemQuantities().keySet())
 					{
-						priceCache.warm(itemId);
+						priceCache.warmIfAbsent(itemId);
 					}
 					for (int itemId : entry.getMinionLootItemQuantities().keySet())
 					{
-						priceCache.warm(itemId);
+						priceCache.warmIfAbsent(itemId);
 					}
 					for (int itemId : entry.getPerfectBonusItemQuantities().keySet())
 					{
-						priceCache.warm(itemId);
+						priceCache.warmIfAbsent(itemId);
 					}
 				}
-				version++;
+				// Reopening History usually finds nothing new; leaving the version alone then
+				// spares the panel rebuilding every row.
+				if (!loaded.equals(entries))
+				{
+					entries = loaded;
+					version++;
+				}
 				loading = false;
 			});
 		});
@@ -98,7 +107,9 @@ public class SessionHistoryManager
 
 	public void delete(SessionHistoryEntry entry)
 	{
-		entries.remove(entry);
+		List<SessionHistoryEntry> remaining = new ArrayList<>(entries);
+		remaining.remove(entry);
+		entries = Collections.unmodifiableList(remaining);
 		version++;
 
 		if (asyncExecutor == null)

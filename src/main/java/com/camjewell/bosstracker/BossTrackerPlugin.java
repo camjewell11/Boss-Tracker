@@ -20,7 +20,6 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.inject.Inject;
-import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -308,7 +307,7 @@ public class BossTrackerPlugin extends Plugin
 		{
 			sessionManager.onTripLoot(bossLoot);
 		}
-		SwingUtilities.invokeLater(panel::refresh);
+		panel.requestRefresh();
 	}
 
 	@Subscribe
@@ -317,7 +316,7 @@ public class BossTrackerPlugin extends Plugin
 		if (event.getActor() == client.getLocalPlayer())
 		{
 			sessionManager.endTrip(TripEndReason.DEATH);
-			SwingUtilities.invokeLater(panel::refresh);
+			panel.requestRefresh();
 		}
 	}
 
@@ -327,7 +326,7 @@ public class BossTrackerPlugin extends Plugin
 		if (event.getGroupId() == InterfaceID.BANKMAIN || event.getGroupId() == InterfaceID.BANK_DEPOSITBOX)
 		{
 			sessionManager.endTrip(TripEndReason.BANKED);
-			SwingUtilities.invokeLater(panel::refresh);
+			panel.requestRefresh();
 		}
 	}
 
@@ -385,6 +384,6 @@ public class BossTrackerPlugin extends Plugin
 			}
 		}
 
-		SwingUtilities.invokeLater(panel::refresh);
+		panel.requestRefresh();
 	}
 }

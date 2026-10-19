@@ -152,13 +152,24 @@ public class BossGoalOverlay extends Overlay
 		return panelComponent.render(graphics);
 	}
 
+	/** The lifetime loot total, recomputed only when the loot changes rather than every frame. */
+	private long cachedLifetimeGp;
+	private int cachedLifetimeGpVersion = -1;
+
 	private long computeCurrentLifetimeGp()
 	{
+		if (lootTracker.getVersion() == cachedLifetimeGpVersion)
+		{
+			return cachedLifetimeGp;
+		}
+		cachedLifetimeGpVersion = lootTracker.getVersion();
+
 		long total = 0;
 		for (Map.Entry<Integer, Integer> entry : lootTracker.getLifetimeLoot().entrySet())
 		{
 			total += priceCache.getPrice(entry.getKey()) * entry.getValue();
 		}
+		cachedLifetimeGp = total;
 		return total;
 	}
 
