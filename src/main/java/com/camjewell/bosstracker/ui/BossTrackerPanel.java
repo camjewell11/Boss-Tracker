@@ -1411,6 +1411,66 @@ public class BossTrackerPanel extends PluginPanel
 	}
 
 	private static final int HISTORY_VALUE_TIERS = 5;
+
+	/** An item worth at least this much each is a notable drop, so a big stack of cheap items isn't. */
+	private static final long NOTABLE_DROP_UNIT_GP = 1_000_000;
+
+	/**
+	 * Hover text for a History row naming its pets and high-value drops, so a session's uniques
+	 * can be spotted without expanding it. Null when there are none, which means no tooltip.
+	 */
+	private String buildNotableDropsTooltip(SessionHistoryEntry entry)
+	{
+		Boss boss = Boss.byNameOrAlias(entry.getBossName());
+		int petItemId = boss != null ? boss.getPetItemId() : -1;
+
+		Map<Integer, Integer> loot = new LinkedHashMap<>();
+		entry.getLootItemQuantities().forEach((id, qty) -> loot.merge(id, qty, Integer::sum));
+		if (entry.getMinionLootItemQuantities() != null)
+		{
+			entry.getMinionLootItemQuantities().forEach((id, qty) -> loot.merge(id, qty, Integer::sum));
+		}
+
+		List<String> pets = new ArrayList<>();
+		List<Integer> valuable = new ArrayList<>();
+		for (Map.Entry<Integer, Integer> item : loot.entrySet())
+		{
+			int itemId = item.getKey();
+			if (itemId == petItemId)
+			{
+				int count = item.getValue();
+				pets.add(priceCache.getName(itemId) + (count > 1 ? " x" + count : "") + " (pet)");
+			}
+			else if (priceCache.getPrice(itemId) >= NOTABLE_DROP_UNIT_GP)
+			{
+				valuable.add(itemId);
+			}
+		}
+		if (pets.isEmpty() && entry.isPetObtained())
+		{
+			// Recorded before pets were added to the loot, or a boss without a single pet item.
+			pets.add("Pet");
+		}
+		if (pets.isEmpty() && valuable.isEmpty())
+		{
+			return null;
+		}
+
+		valuable.sort((a, b) -> Long.compare(priceCache.getPrice(b) * loot.get(b), priceCache.getPrice(a) * loot.get(a)));
+		StringBuilder tooltip = new StringBuilder("<html>Notable drops:");
+		for (String pet : pets)
+		{
+			tooltip.append("<br>").append(pet);
+		}
+		for (int itemId : valuable)
+		{
+			int quantity = loot.get(itemId);
+			tooltip.append("<br>").append(priceCache.getName(itemId))
+				.append(quantity > 1 ? " x" + quantity : "")
+				.append(" (").append(GpFormat.abbreviated((double) priceCache.getPrice(itemId) * quantity)).append(')');
+		}
+		return tooltip.append("</html>").toString();
+	}
 	private static final Color PET_GOLD = new Color(0xFFD700);
 
 	/**
@@ -1615,8 +1675,8 @@ public class BossTrackerPanel extends PluginPanel
 		if (entry.isPetObtained())
 		{
 			expandButton.setText(gradientHtml(expandButton.getText(), valueColor != null ? valueColor : Color.WHITE, PET_GOLD));
-			expandButton.setToolTipText("A pet dropped this session");
 		}
+		expandButton.setToolTipText(buildNotableDropsTooltip(entry));
 
 		JButton deleteButton = new JButton("✕");
 		deleteButton.setToolTipText("Delete this session");
