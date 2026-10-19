@@ -27,9 +27,18 @@ of dozens of scattered per-boss special cases.
   dialog for a one-time chat notification when that boss's all-time loot value crosses the
   threshold.
 - **Loot tracking**: a per-boss loot grid (session or all-time, toggle via config) with item
-  icons, quantities, Grand Exchange values (shown per-item in the hover tooltip), GP/kill, and an
+  icons, quantities, Grand Exchange and high alch values in the hover tooltip, GP/kill, and an
   abbreviated GP/hour (e.g. `1.23m/hr`), plus a per-item "ignore" option to hide junk drops from
-  the grid.
+  the grid. Amounts of a billion or more are shortened (`1.22b`) where space is tight.
+  - **God Wars minions**: drops from a general's bodyguards get their own Minion Loot section and
+    never count as boss kills.
+  - **Desert Treasure II perfect kills**: the extra loot from a kill without avoidable damage
+    (Vardorvis, the Leviathan, the Whisperer, Duke Sucellus) goes to a Perfect Kill Bonus
+    section, so the regular grid shows what a normal kill drops.
+  - **Pets**: a pet drop (including duplicates) is added to the session's loot.
+- **Trips**: a session is split into trips, ended by banking, dying, or leaving the boss's area.
+  The panel shows the current trip and average kills per trip; raids and other single-run
+  encounters have none.
 - **Session history log**: every completed session (ended manually, via `!End`, by an inactivity
   timeout, by switching to a different boss, or by closing the client mid-session) is saved to a
   collapsible log in its own side panel tab — kills, KPH, average/fastest kill, idle time, session
@@ -37,6 +46,13 @@ of dozens of scattered per-boss special cases.
   expanded when you switch tabs and back, and a "Collapse All" button clears them in one click.
   Each entry can be deleted (with a confirmation prompt). History is stored as one JSON file per
   session under `.runelite/boss-tracker/<accountHash>/history/`.
+  - Each item is valued at its price when it dropped, so a session's value doesn't drift with the
+    Grand Exchange.
+  - Rows are coloured by session value in five configurable tiers (RuneLite's loot-beam colours by
+    default), fade into gold when a pet dropped, show the boss's icon, and list the session's pets
+    and uniques on hover.
+  - Filter to one boss or to sessions with uniques, sort by value, or browse newest first,
+    grouped by day with daily totals.
 - **Slayer task detection**: if a kill counts toward your current Slayer task, that session is
   flagged for the rest of its duration and shown with the Slayer skill icon in the History tab.
   Works automatically if the Slayer plugin is enabled; if it isn't, sessions simply aren't flagged.
@@ -44,7 +60,10 @@ of dozens of scattered per-boss special cases.
   "vetion", "General Graardor") from the side panel's Search tab, whether or not you're currently
   tracking it — total KC, kills tracked, average KPH, fastest kill, total tracked time, GP/kill,
   total GP, and a loot grid — with a "Delete Data" option (with a confirmation prompt, disabled
-  when there's nothing recorded yet) to wipe a boss's saved stats and loot.
+  when there's nothing recorded yet) to wipe a boss's saved stats and loot. It also shows your dry
+  streak (kills since your last unique) and a KPH trend across recent sessions.
+- **Item search**: search an item name to see every saved session that dropped it — which boss,
+  when, and how many.
 - Automatic session pause on logout, auto-resume when combat-relevant chat activity is seen while
   paused, and an optional inactivity timeout to auto-end long-idle sessions. Closing the RuneLite
   client entirely while a session is paused (rather than explicitly ending it) still persists that
@@ -53,7 +72,7 @@ of dozens of scattered per-boss special cases.
 
 ## Configuration
 
-Settings are grouped into four sections:
+Settings are grouped into five sections:
 
 - **Display Options** — overlay/infobox toggles and which stats they show.
 - **General Settings** — side panel position, kill-duration chat messages, session timeout, KPH
@@ -62,6 +81,8 @@ Settings are grouped into four sections:
   stats the goal overlay's two rows show, and whether reaching a goal sends a chat notification.
 - **Loot Display** — whether the loot grid shows this session's loot or all-time loot for the
   currently tracked boss.
+- **History Highlight** — colouring History rows by session value, and each tier's value and
+  colour.
 
 ## How to Use
 
@@ -81,13 +102,14 @@ tabs:
     loot and the boss's all-time loot.
 - **History** — every session you've completed (ended manually, via `!End`, by timing out, by
   switching bosses, or by closing the client mid-session) is logged here. Click an entry to
-  expand its stats and loot (a Slayer skill icon appears if the session was fought on a matching
-  Slayer task); click the ✕ and confirm to remove one, or use "Collapse All" to close every
-  expanded entry at once.
+  expand its stats, trips and loot (a Slayer skill icon appears if the session was fought on a
+  matching Slayer task); hover it to see its pets and uniques; click the ✕ and confirm to remove
+  one, or use "Collapse All" to close every expanded entry at once. The boss filter, sort order and
+  "Uniques Only" button at the top narrow the list.
 - **Search** — look up all-time stats and loot for *any* tracked boss by name or alias (e.g.
-  "cox", "vetion", "kbd"), whether or not you're currently tracking it. Includes a "Delete Data"
-  button below the result (disabled if there's nothing recorded yet) to wipe a boss's saved stats
-  and loot, with a confirmation prompt.
+  "cox", "vetion", "kbd"), whether or not you're currently tracking it, or type an item name to
+  find the sessions that dropped it. A boss result includes a "Delete Data" button (disabled if
+  there's nothing recorded yet) to wipe its saved stats and loot, with a confirmation prompt.
 
 Chat commands work at any time: `!Info` announces your current session, `!End` ends it, `!Pause`
 and `!Resume` control it manually. All display/behavior details (which stats show, KPH
