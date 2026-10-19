@@ -33,6 +33,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -64,6 +65,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import net.runelite.api.Skill;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.ui.ColorScheme;
@@ -1416,6 +1418,29 @@ public class BossTrackerPanel extends PluginPanel
 	private static final long NOTABLE_DROP_UNIT_GP = 1_000_000;
 
 	/**
+	 * Raid cosmetics, always notable whatever their price: several are worth well under the
+	 * threshold or can't be traded at all, but are still rare uniques. In-game names noted,
+	 * since several gameval names don't resemble them.
+	 */
+	private static final Set<Integer> RAID_COSMETICS = new HashSet<>(Arrays.asList(
+		ItemID.ANCESTRAL_ROBES_TWISTED_KIT,     // Twisted ancestral colour kit (CoX)
+		ItemID.RAIDS_CHALLENGE_MORPH,           // Metamorphic dust (CoX)
+		ItemID.TOB_HARDMODE_KIT,                // Holy ornament kit (ToB)
+		ItemID.TOB_HARDMODE_KIT_BLOOD,          // Sanguine ornament kit (ToB)
+		ItemID.TOB_HARDMODE_DUST,               // Sanguine dust (ToB)
+		ItemID.OSMUMTENS_FANG_ORNAMENT_KIT,     // Cursed phalanx (ToA)
+		ItemID.ELIDINIS_WARD_ORNAMENT_KIT,      // Menaphite ornament kit (ToA)
+		ItemID.THREAD_OF_ELIDINIS,              // Thread of Elidinis (ToA)
+		ItemID.EYE_OF_THE_CORRUPTOR,            // Eye of the corruptor (ToA)
+		ItemID.JEWEL_OF_THE_SUN,                // Jewel of the sun (ToA)
+		ItemID.JEWEL_OF_AMASCUT,                // Jewel of amascut (ToA)
+		ItemID.TOA_PET_MORPH_AKKHA,             // Remnant of Akkha (ToA)
+		ItemID.TOA_PET_MORPH_BABA,              // Remnant of Ba-Ba (ToA)
+		ItemID.TOA_PET_MORPH_KEPHRI,            // Remnant of Kephri (ToA)
+		ItemID.TOA_PET_MORPH_ZEBAK,             // Remnant of Zebak (ToA)
+		ItemID.TOA_PET_MORPH_WARDENS));         // Ancient remnant (ToA)
+
+	/**
 	 * Hover text for a History row naming its pets and high-value drops, so a session's uniques
 	 * can be spotted without expanding it. Null when there are none, which means no tooltip.
 	 */
@@ -1441,7 +1466,7 @@ public class BossTrackerPanel extends PluginPanel
 				int count = item.getValue();
 				pets.add(priceCache.getName(itemId) + (count > 1 ? " x" + count : "") + " (pet)");
 			}
-			else if (priceCache.getPrice(itemId) >= NOTABLE_DROP_UNIT_GP)
+			else if (priceCache.getPrice(itemId) >= NOTABLE_DROP_UNIT_GP || RAID_COSMETICS.contains(itemId))
 			{
 				valuable.add(itemId);
 			}
@@ -1465,9 +1490,13 @@ public class BossTrackerPanel extends PluginPanel
 		for (int itemId : valuable)
 		{
 			int quantity = loot.get(itemId);
-			tooltip.append("<br>").append(priceCache.getName(itemId))
-				.append(quantity > 1 ? " x" + quantity : "")
-				.append(" (").append(GpFormat.abbreviated((double) priceCache.getPrice(itemId) * quantity)).append(')');
+			long value = priceCache.getPrice(itemId) * quantity;
+			tooltip.append("<br>").append(priceCache.getName(itemId)).append(quantity > 1 ? " x" + quantity : "");
+			if (value > 0)
+			{
+				// Untradeable cosmetics have no price to show.
+				tooltip.append(" (").append(GpFormat.abbreviated(value)).append(')');
+			}
 		}
 		return tooltip.append("</html>").toString();
 	}
