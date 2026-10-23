@@ -44,6 +44,15 @@ public class LootBossMatcherTest
 	}
 
 	@Test
+	public void fracturedArchiveChestAndRoomDrops()
+	{
+		assertTrue(LootBossMatcher.matchesLootEvent(Boss.FRACTURED_ARCHIVE, "Fractured Archive"));
+		// Seen in-game: name='Xarth'.
+		assertTrue(LootBossMatcher.matchesLootEvent(Boss.FRACTURED_ARCHIVE, "Xarth"));
+		assertFalse(LootBossMatcher.matchesLootEvent(Boss.TOA_NORMAL, "Fractured Archive"));
+	}
+
+	@Test
 	public void godWarsMinionsMatchTheirGeneralAsMinionsOnly()
 	{
 		assertTrue(LootBossMatcher.matchesMinionLootEvent(Boss.GENERAL_GRAARDOR, "Sergeant Strongstack"));

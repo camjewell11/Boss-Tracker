@@ -11,7 +11,7 @@ public class BossTripTest
 	public void raidsAndSingleRunEncountersHaveNoTrips()
 	{
 		for (Boss boss : new Boss[]{
-			Boss.CHAMBERS, Boss.CM_CHAMBERS, Boss.TOA_NORMAL, Boss.TOA_EXPERT,
+			Boss.CHAMBERS, Boss.CM_CHAMBERS, Boss.TOA_NORMAL, Boss.TOA_EXPERT, Boss.FRACTURED_ARCHIVE,
 			Boss.THEATRE_OF_BLOOD, Boss.THEATRE_OF_BLOOD_HM,
 			Boss.GAUNTLET, Boss.COLOSSEUM, Boss.TZTOK_JAD, Boss.TZKAL_ZUK})
 		{

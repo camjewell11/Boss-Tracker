@@ -39,6 +39,8 @@ public enum Boss
 	CM_CHAMBERS("CM Chambers", ItemID.OLMPET, "Your completed Chambers of Xeric Challenge Mode count is:", "cm", "cm cox", "challange mode", "challange mode chambers of xeric"),
 	TOA_NORMAL("TOA Normal", ItemID.WARDENPET_TUMEKEN, "Your completed Tombs of Amascut count is:", "toa"),
 	TOA_EXPERT("TOA Expert", ItemID.WARDENPET_ELIDINIS, "Your completed Tombs of Amascut: Expert Mode count is:"),
+	FRACTURED_ARCHIVE("Fractured Archive", ItemID.OCELLUSPET, "Your completed Fractured Archive count is:",
+		"the fractured archive", "archive", "tfa"),
 	COLOSSEUM("Colosseum", ItemID.SOLHEREDITPET, "Your Sol Heredit kill count is:", "fortis colosseum", "colo"),
 	// Regular and Corrupted runs share one boss so back-to-back runs of either land in one session.
 	GAUNTLET("Gauntlet", ItemID.GAUNTLETPET_CORRUPT, KillTiming.SELF_REPORTED, 0,
@@ -197,7 +199,7 @@ public enum Boss
 	 * nothing: dying ends the run itself, and raids have banks inside them.
 	 */
 	private static final Set<Boss> NO_TRIPS = EnumSet.of(
-		CHAMBERS, CM_CHAMBERS, TOA_NORMAL, TOA_EXPERT, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM,
+		CHAMBERS, CM_CHAMBERS, TOA_NORMAL, TOA_EXPERT, FRACTURED_ARCHIVE, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM,
 		GAUNTLET, COLOSSEUM, TZTOK_JAD, TZKAL_ZUK);
 
 	/**
@@ -208,7 +210,8 @@ public enum Boss
 
 	/**
 	 * Pet items for bosses whose icon isn't their pet. -1 where there's no single pet item: no
-	 * pet at all, or the combined Dagannoth Kings, where the message doesn't say which king's.
+	 * pet at all, or where the message doesn't say which pet: the combined Dagannoth Kings, and
+	 * the Fractured Archive, whose every boss has its own.
 	 */
 	private static final Map<Boss, Integer> PET_ITEM_OVERRIDES = new EnumMap<>(Boss.class);
 
@@ -233,6 +236,7 @@ public enum Boss
 		PET_ITEM_OVERRIDES.put(CRAZY_ARCHAEOLOGIST, -1);
 		PET_ITEM_OVERRIDES.put(DERANGED_ARCHAEOLOGIST, -1);
 		PET_ITEM_OVERRIDES.put(DAGANNOTH_KINGS, -1);
+		PET_ITEM_OVERRIDES.put(FRACTURED_ARCHIVE, -1);
 		PET_ITEM_OVERRIDES.put(CHAOS_FANATIC, ItemID.CHAOSELEPET);
 		PET_ITEM_OVERRIDES.put(THEATRE_OF_BLOOD_HM, ItemID.VERZIKPET);
 

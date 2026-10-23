@@ -52,6 +52,11 @@ public final class LootBossMatcher
 		LOOT_ALIASES.put(Boss.COLOSSEUM, Collections.singletonList("Fortis Colosseum"));
 		LOOT_ALIASES.put(Boss.GROTESQUE_GUARDIANS, Arrays.asList("Dusk", "Dawn"));
 		LOOT_ALIASES.put(Boss.HUEYCOATL, Collections.singletonList("The Hueycoatl"));
+		// The reward chest (seen in-game as name='Fractured Archive'), and drops from the rooms'
+		// bosses, such as Xarth's ashes (name='Xarth'), which go to one player a kill.
+		LOOT_ALIASES.put(Boss.FRACTURED_ARCHIVE, Arrays.asList("Fractured Archive",
+			"Archive Guardian", "Ezekiel", "Bork", "The Smorks", "Moia", "Dreadnoth the Jellied",
+			"Dagon'hai", "Xarth", "Ocellus"));
 	}
 
 	/**

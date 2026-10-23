@@ -140,6 +140,14 @@ public class SessionManager
 			return;
 		}
 
+		if (session != null && session.getBoss() == Boss.FRACTURED_ARCHIVE
+			&& ChatKillParser.isFracturedArchiveActivity(message))
+		{
+			// No varbit is known yet for being in the Archive, so its chat stands in for one:
+			// runs that wipe still count as raiding (see checkSessionTimeout).
+			lastRaidPresence = Instant.now();
+		}
+
 		boolean resumedByThisMessage = false;
 		if (session != null && session.isPaused()
 			&& ChatKillParser.isRecognizedBossMessage(message, config.dksSelector(), inFightCavesOrInferno))

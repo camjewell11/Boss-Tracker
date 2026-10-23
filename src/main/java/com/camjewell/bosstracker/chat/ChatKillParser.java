@@ -26,8 +26,18 @@ public final class ChatKillParser
 		"Theatre of Blood total completion time: ",
 		"Tombs of Amascut: Expert Mode total completion time:",
 		"Tombs of Amascut total completion time:",
+		"The Fractured Archive: Total completion time:",
 		"Colosseum duration:"
 	);
+
+	/**
+	 * The Fractured Archive's rooms, as chat names them. One boss is picked from each pair:
+	 * Archive Guardian, then Ezekiel or Bork, Moia or Dreadnoth the Jellied, Dagon'hai or Xarth,
+	 * and Ocellus last. Room messages also use "Challenge started/complete:" in Tombs of Amascut,
+	 * so they only count as Archive activity when they name one of these.
+	 */
+	private static final List<String> ARCHIVE_ROOMS = Arrays.asList(
+		"Archive Guardian", "Ezekiel", "Bork", "Moia", "Dreadnoth the Jellied", "Dagon'hai", "Xarth", "Ocellus");
 
 	private ChatKillParser()
 	{
@@ -127,28 +137,18 @@ public final class ChatKillParser
 		{
 			sub = sub.substring(0, sub.indexOf("."));
 		}
-		sub = sub.replace(":", "");
 
-		String hours = "0";
-		String minutes;
-		String seconds;
-		switch (sub.length())
+		// "s", "m:ss" or "h:mm:ss"; each part is worth 60 of the next.
+		int total = 0;
+		for (String part : sub.split(":"))
 		{
-			case 4:
-				minutes = sub.substring(0, 2);
-				seconds = sub.substring(2);
-				break;
-			case 5:
-				hours = sub.substring(0, 1);
-				minutes = sub.substring(1, 2);
-				seconds = sub.substring(2);
-				break;
-			default:
-				minutes = sub.substring(0, 1);
-				seconds = sub.substring(1);
-				break;
+			if (!part.matches("\\d+"))
+			{
+				return null;
+			}
+			total = total * 60 + Integer.parseInt(part);
 		}
-		return Integer.parseInt(seconds) + Integer.parseInt(minutes) * 60 + Integer.parseInt(hours) * 3600;
+		return total;
 	}
 
 	/**
@@ -193,7 +193,33 @@ public final class ChatKillParser
 		{
 			return message;
 		}
+		if (message.contains("The Fractured Archive: Total completion time:"))
+		{
+			return message;
+		}
 		return null;
+	}
+
+	/**
+	 * @return true for chat that shows the player is running the Fractured Archive: entering or
+	 * failing it, and each room starting, finishing or being moved on to.
+	 */
+	public static boolean isFracturedArchiveActivity(String message)
+	{
+		if (message.contains("Fractured Archive") || message.startsWith("You enter the Archive")
+			|| message.contains("proceeded to the inner vault"))
+		{
+			return true;
+		}
+		for (String room : ARCHIVE_ROOMS)
+		{
+			if (message.startsWith("Challenge started: " + room) || message.startsWith("Challenge complete: " + room)
+				|| message.contains("proceeded to face " + room))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
