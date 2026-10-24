@@ -113,6 +113,7 @@ public class BossTrackerPanel extends PluginPanel
 	private static final DateTimeFormatter HISTORY_DAY_FORMAT = DateTimeFormatter.ofPattern("EEE, MMM d")
 		.withZone(ZoneId.systemDefault());
 	private static final String ALL_BOSSES = "All bosses";
+	private static final String ALL_RAIDS = "All raids";
 	private static final String SORT_NEWEST = "Newest first";
 	private static final String SORT_VALUE = "Highest value";
 	private static final ImageIcon SEARCH_ICON = new ImageIcon(ImageUtil.loadImageResource(IconTextField.class, "search.png"));
@@ -1944,7 +1945,8 @@ public class BossTrackerPanel extends PluginPanel
 		List<SessionHistoryEntry> shown = new ArrayList<>();
 		for (SessionHistoryEntry entry : entries)
 		{
-			if (boss != null && !ALL_BOSSES.equals(boss) && !boss.equals(entry.getBossName()))
+			if (ALL_RAIDS.equals(boss) ? !isRaid(entry)
+				: boss != null && !ALL_BOSSES.equals(boss) && !boss.equals(entry.getBossName()))
 			{
 				continue;
 			}
@@ -1957,24 +1959,41 @@ public class BossTrackerPanel extends PluginPanel
 		return shown;
 	}
 
-	/** Offers every boss with a saved session, keeping the current choice where it still exists. */
+	private static boolean isRaid(SessionHistoryEntry entry)
+	{
+		Boss boss = Boss.byName(entry.getBossName());
+		return boss != null && boss.isRaid();
+	}
+
+	/**
+	 * Offers every boss with a saved session, and all raids together once there's a raid,
+	 * keeping the current choice where it still exists.
+	 */
 	private void updateHistoryBossFilter(List<SessionHistoryEntry> entries)
 	{
 		Set<String> bossNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+		boolean anyRaid = false;
 		for (SessionHistoryEntry entry : entries)
 		{
 			bossNames.add(entry.getBossName());
+			anyRaid |= isRaid(entry);
 		}
 
 		Object selected = historyBossFilter.getSelectedItem();
 		updatingHistoryFilters = true;
 		historyBossFilter.removeAllItems();
 		historyBossFilter.addItem(ALL_BOSSES);
+		if (anyRaid)
+		{
+			historyBossFilter.addItem(ALL_RAIDS);
+		}
 		for (String name : bossNames)
 		{
 			historyBossFilter.addItem(name);
 		}
-		historyBossFilter.setSelectedItem(selected != null && bossNames.contains(selected.toString()) ? selected : ALL_BOSSES);
+		boolean stillOffered = selected != null
+			&& (bossNames.contains(selected.toString()) || (anyRaid && ALL_RAIDS.equals(selected)));
+		historyBossFilter.setSelectedItem(stillOffered ? selected : ALL_BOSSES);
 		updatingHistoryFilters = false;
 		lastRenderedHistoryFilter = Objects.hash(historyBossFilter.getSelectedItem(), historySortOrder.getSelectedItem(),
 			historyUniquesOnlyButton.isSelected());
@@ -2086,7 +2105,7 @@ public class BossTrackerPanel extends PluginPanel
 		{
 			styleComboBox(combo);
 		}
-		historyBossFilter.setToolTipText("Show one boss's sessions");
+		historyBossFilter.setToolTipText("Show one boss's sessions, or every raid's");
 		historySortOrder.setToolTipText("Newest first groups sessions by day");
 		historyBossFilter.addActionListener(e ->
 		{

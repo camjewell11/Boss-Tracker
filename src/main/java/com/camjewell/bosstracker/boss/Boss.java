@@ -202,6 +202,9 @@ public enum Boss
 		CHAMBERS, CM_CHAMBERS, TOA_NORMAL, TOA_EXPERT, FRACTURED_ARCHIVE, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM,
 		GAUNTLET, COLOSSEUM, TZTOK_JAD, TZKAL_ZUK);
 
+	private static final Set<Boss> RAIDS = EnumSet.of(
+		CHAMBERS, CM_CHAMBERS, TOA_NORMAL, TOA_EXPERT, FRACTURED_ARCHIVE, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM);
+
 	/**
 	 * Display names a boss's data used to be saved under before bosses were merged. Their stats
 	 * and loot files are folded into the boss's own the first time they're loaded.
@@ -322,6 +325,11 @@ public enum Boss
 	public boolean tracksTrips()
 	{
 		return !NO_TRIPS.contains(this);
+	}
+
+	public boolean isRaid()
+	{
+		return RAIDS.contains(this);
 	}
 
 	/**

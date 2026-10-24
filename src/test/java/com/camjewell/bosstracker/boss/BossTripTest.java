@@ -20,6 +20,21 @@ public class BossTripTest
 	}
 
 	@Test
+	public void raidsAreEveryRaidModeAndTheArchive()
+	{
+		for (Boss boss : new Boss[]{
+			Boss.CHAMBERS, Boss.CM_CHAMBERS, Boss.TOA_NORMAL, Boss.TOA_EXPERT,
+			Boss.THEATRE_OF_BLOOD, Boss.THEATRE_OF_BLOOD_HM, Boss.FRACTURED_ARCHIVE})
+		{
+			assertTrue(boss + " is a raid", boss.isRaid());
+		}
+		// Single-run encounters that aren't raids.
+		assertFalse(Boss.GAUNTLET.isRaid());
+		assertFalse(Boss.COLOSSEUM.isRaid());
+		assertFalse(Boss.NEX.isRaid());
+	}
+
+	@Test
 	public void barrowsTracksTripsButNotByArea()
 	{
 		assertTrue(Boss.BARROWS.tracksTrips());
