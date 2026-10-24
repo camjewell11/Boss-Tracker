@@ -2,6 +2,7 @@ package com.camjewell.bosstracker.ui;
 
 import com.camjewell.bosstracker.BossTrackerConfig;
 import com.camjewell.bosstracker.boss.Boss;
+import com.camjewell.bosstracker.history.DateQuery;
 import com.camjewell.bosstracker.history.DryStreak;
 import com.camjewell.bosstracker.history.ItemDropSearch;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
@@ -382,7 +383,7 @@ public class BossTrackerPanel extends PluginPanel
 		searchToggleButton.setOpaque(false);
 		searchToggleButton.setContentAreaFilled(false);
 		searchToggleButton.setPreferredSize(new Dimension(24, 24));
-		searchToggleButton.setToolTipText("Look up a boss's all-time stats, or find which sessions dropped an item");
+		searchToggleButton.setToolTipText("Look up a boss's all-time stats, or find sessions by item or date");
 		searchToggleButton.addActionListener(e ->
 		{
 			viewCardLayout.show(viewContainer, searchToggleButton.isSelected() ? "search"
@@ -412,7 +413,7 @@ public class BossTrackerPanel extends PluginPanel
 		container.setOpaque(false);
 		container.setBorder(new EmptyBorder(0, 0, 8, 0));
 
-		searchField.setToolTipText("Boss name or alias (\"cox\", \"General Graardor\"), or an item to find the sessions that dropped it");
+		searchField.setToolTipText("A boss (\"cox\"), an item to find the sessions that dropped it, or a date (\"Oct 17\", \"October\", \"2026\")");
 		searchField.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		searchField.setForeground(Color.WHITE);
 		searchField.setCaretColor(Color.WHITE);
@@ -1333,6 +1334,30 @@ public class BossTrackerPanel extends PluginPanel
 		lastRenderedSearchQuery = searchQuery;
 
 		searchResultPanel.removeAll();
+
+		// A day, month or year shows its sessions as History rows, grouped by day; a longer range
+		// adds an overall header first.
+		DateQuery.Range searchRange = DateQuery.parse(searchQuery, LocalDate.now());
+		List<SessionHistoryEntry> rangeSessions = new ArrayList<>();
+		if (searchRange != null)
+		{
+			for (SessionHistoryEntry entry : historyManager.getEntries())
+			{
+				if (searchRange.contains(sessionDay(entry)))
+				{
+					rangeSessions.add(entry);
+				}
+			}
+			if (!rangeSessions.isEmpty())
+			{
+				if (!searchRange.isSingleDay())
+				{
+					searchResultPanel.add(buildDateRangeHeader(searchRange, rangeSessions));
+				}
+				addSessionsByDay(searchResultPanel, rangeSessions);
+			}
+		}
+
 		Boss boss = lookupManager.getBoss();
 		if (boss != null)
 		{
@@ -1346,13 +1371,18 @@ public class BossTrackerPanel extends PluginPanel
 			searchResultPanel.add(buildItemSearchResults(itemMatches));
 		}
 
-		if (searchQuery.isEmpty() || boss != null || !itemMatches.isEmpty())
+		if (searchQuery.isEmpty() || boss != null || !itemMatches.isEmpty() || !rangeSessions.isEmpty())
 		{
 			searchResultLabel.setText("");
 		}
+		else if (searchRange != null)
+		{
+			searchResultLabel.setText((searchRange.isSingleDay() ? "No saved sessions on " : "No saved sessions in ")
+				+ searchRange.getLabel() + ".");
+		}
 		else
 		{
-			searchResultLabel.setText("No boss or saved drop matches \"" + searchQuery + "\".");
+			searchResultLabel.setText("No boss, saved drop or date matches \"" + searchQuery + "\".");
 		}
 
 		searchResultPanel.revalidate();
@@ -1875,26 +1905,36 @@ public class BossTrackerPanel extends PluginPanel
 		}
 		else
 		{
-			// Newest first, grouped by the day each session ended.
-			shown.sort(Comparator.comparingLong(SessionHistoryEntry::getEndedAtEpochMilli).reversed());
-			Map<LocalDate, List<SessionHistoryEntry>> days = new LinkedHashMap<>();
-			for (SessionHistoryEntry entry : shown)
-			{
-				LocalDate day = Instant.ofEpochMilli(entry.getEndedAtEpochMilli()).atZone(ZoneId.systemDefault()).toLocalDate();
-				days.computeIfAbsent(day, d -> new ArrayList<>()).add(entry);
-			}
-			for (List<SessionHistoryEntry> day : days.values())
-			{
-				historyEntriesPanel.add(buildHistoryDayHeader(day));
-				for (SessionHistoryEntry entry : day)
-				{
-					historyEntriesPanel.add(buildHistoryEntryPanel(entry));
-				}
-			}
+			addSessionsByDay(historyEntriesPanel, shown);
 		}
 
 		historyEntriesPanel.revalidate();
 		historyEntriesPanel.repaint();
+	}
+
+	private static LocalDate sessionDay(SessionHistoryEntry entry)
+	{
+		return Instant.ofEpochMilli(entry.getEndedAtEpochMilli()).atZone(ZoneId.systemDefault()).toLocalDate();
+	}
+
+	/** Adds sessions newest first, each day under a header with its session count and total. */
+	private void addSessionsByDay(JPanel target, List<SessionHistoryEntry> sessions)
+	{
+		List<SessionHistoryEntry> newestFirst = new ArrayList<>(sessions);
+		newestFirst.sort(Comparator.comparingLong(SessionHistoryEntry::getEndedAtEpochMilli).reversed());
+		Map<LocalDate, List<SessionHistoryEntry>> days = new LinkedHashMap<>();
+		for (SessionHistoryEntry entry : newestFirst)
+		{
+			days.computeIfAbsent(sessionDay(entry), d -> new ArrayList<>()).add(entry);
+		}
+		for (List<SessionHistoryEntry> day : days.values())
+		{
+			target.add(buildHistoryDayHeader(day));
+			for (SessionHistoryEntry entry : day)
+			{
+				target.add(buildHistoryEntryPanel(entry));
+			}
+		}
 	}
 
 	private List<SessionHistoryEntry> filterHistory(List<SessionHistoryEntry> entries)
@@ -1938,6 +1978,32 @@ public class BossTrackerPanel extends PluginPanel
 		updatingHistoryFilters = false;
 		lastRenderedHistoryFilter = Objects.hash(historyBossFilter.getSelectedItem(), historySortOrder.getSelectedItem(),
 			historyUniquesOnlyButton.isSelected());
+	}
+
+	/** "October 2026  12 sessions · 48.2m" above a month's or year's sessions. */
+	private JPanel buildDateRangeHeader(DateQuery.Range range, List<SessionHistoryEntry> sessions)
+	{
+		double total = 0;
+		for (SessionHistoryEntry entry : sessions)
+		{
+			total += historyLootValue(entry);
+		}
+		JLabel label = new JLabel(htmlLabel(range.getLabel() + "  ",
+			sessions.size() + (sessions.size() == 1 ? " session · " : " sessions · ") + GpFormat.abbreviated(total)));
+		label.setFont(FontManager.getRunescapeBoldFont());
+
+		JPanel header = new JPanel(new BorderLayout())
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		header.setOpaque(false);
+		header.setBorder(new EmptyBorder(2, 2, 4, 2));
+		header.add(label, BorderLayout.CENTER);
+		return header;
 	}
 
 	private JPanel buildHistoryDayHeader(List<SessionHistoryEntry> day)
