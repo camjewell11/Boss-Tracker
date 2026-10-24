@@ -61,7 +61,7 @@ of dozens of scattered per-boss special cases.
   tracking it — total KC, kills tracked, average KPH, fastest kill, total tracked time, GP/kill,
   total GP, and a loot grid — with a "Delete Data" option (with a confirmation prompt, disabled
   when there's nothing recorded yet) to wipe a boss's saved stats and loot. It also shows your dry
-  streak (kills since your last unique) and a KPH trend across recent sessions.
+  streak (kills since your last unique).
 - **Item search**: search an item name to see every saved session that dropped it — which boss,
   when, and how many.
 - Automatic session pause on logout, auto-resume when combat-relevant chat activity is seen while

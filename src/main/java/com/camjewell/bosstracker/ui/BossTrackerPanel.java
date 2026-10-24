@@ -113,8 +113,6 @@ public class BossTrackerPanel extends PluginPanel
 	private static final String ALL_BOSSES = "All bosses";
 	private static final String SORT_NEWEST = "Newest first";
 	private static final String SORT_VALUE = "Highest value";
-	/** The KPH trend in the boss lookup covers at most this many recent sessions. */
-	private static final int KPH_TREND_SESSIONS = 30;
 	private static final ImageIcon SEARCH_ICON = new ImageIcon(ImageUtil.loadImageResource(IconTextField.class, "search.png"));
 
 	private final SessionManager sessionManager;
@@ -1492,11 +1490,6 @@ public class BossTrackerPanel extends PluginPanel
 			detailPanel.add(Box.createRigidArea(new Dimension(0, 4)));
 			detailPanel.add(buildDryStreakPanel(boss, bossHistory, liveSession));
 		}
-		if (bossHistory.size() >= 2)
-		{
-			detailPanel.add(Box.createRigidArea(new Dimension(0, 6)));
-			detailPanel.add(buildKphTrendPanel(bossHistory));
-		}
 
 		if (!lootMap.isEmpty())
 		{
@@ -1595,34 +1588,6 @@ public class BossTrackerPanel extends PluginPanel
 		JLabel lastLabel = new JLabel(htmlLabel("Last Unique: ", lastText));
 		dryLabel.setToolTipText("Kills since a pet, raid cosmetic, or drop worth 1m+ each, from saved sessions");
 		return createStatsPanel(dryLabel, lastLabel);
-	}
-
-	/** KPH across the boss's recent sessions, oldest on the left. */
-	private JPanel buildKphTrendPanel(List<SessionHistoryEntry> bossHistory)
-	{
-		List<SessionHistoryEntry> oldestFirst = new ArrayList<>(bossHistory);
-		oldestFirst.sort(Comparator.comparingLong(SessionHistoryEntry::getEndedAtEpochMilli));
-		List<SessionHistoryEntry> recent = oldestFirst.subList(Math.max(0, oldestFirst.size() - KPH_TREND_SESSIONS), oldestFirst.size());
-		double[] kph = new double[recent.size()];
-		for (int i = 0; i < kph.length; i++)
-		{
-			kph[i] = recent.get(i).getKillsPerHour();
-		}
-
-		JLabel label = new JLabel(htmlLabel("KPH Trend: ", String.format("%.1f → %.1f (last %d sessions)",
-			kph[0], kph[kph.length - 1], kph.length)));
-		JPanel panel = new JPanel(new BorderLayout(0, 2))
-		{
-			@Override
-			public Dimension getMaximumSize()
-			{
-				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
-			}
-		};
-		panel.setOpaque(false);
-		panel.add(label, BorderLayout.NORTH);
-		panel.add(new Sparkline(kph, ACTIVE_COLOR), BorderLayout.CENTER);
-		return panel;
 	}
 
 	/**
