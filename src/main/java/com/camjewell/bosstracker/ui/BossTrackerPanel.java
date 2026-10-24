@@ -30,6 +30,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -423,9 +424,32 @@ public class BossTrackerPanel extends PluginPanel
 		searchButton.addActionListener(e -> runSearch.run());
 		searchField.addActionListener(e -> runSearch.run());
 
+		JButton clearButton = new JButton("✕");
+		clearButton.setToolTipText("Clear the search and return to History");
+		styleButton(clearButton, ColorScheme.PROGRESS_ERROR_COLOR);
+		// No padding: at this width the default margins squeeze the ✕ into an ellipsis.
+		clearButton.setMargin(new Insets(0, 0, 0, 0));
+		clearButton.setPreferredSize(new Dimension(28, searchButton.getPreferredSize().height));
+		clearButton.addActionListener(e -> clearSearch());
+
+		JPanel buttons = new JPanel(new BorderLayout(4, 0));
+		buttons.setOpaque(false);
+		buttons.add(searchButton, BorderLayout.CENTER);
+		buttons.add(clearButton, BorderLayout.EAST);
+
 		container.add(searchField, BorderLayout.CENTER);
-		container.add(searchButton, BorderLayout.EAST);
+		container.add(buttons, BorderLayout.EAST);
 		return container;
+	}
+
+	/** Empties the search and its results, then shows History as its tab button would. */
+	private void clearSearch()
+	{
+		searchField.setText("");
+		searchQuery = "";
+		lookupManager.clear();
+		refreshSearchPanel();
+		historyTabButton.doClick();
 	}
 
 	private void performSearch()
