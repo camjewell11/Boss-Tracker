@@ -51,16 +51,19 @@ import javax.swing.AbstractButton;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JComboBox;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollBar;
+import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
@@ -71,6 +74,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
+import javax.swing.plaf.basic.BasicComboPopup;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import net.runelite.api.Skill;
 import net.runelite.client.game.ItemManager;
@@ -303,7 +307,12 @@ public class BossTrackerPanel extends PluginPanel
 	private void customizeScrollBar()
 	{
 		getScrollPane().setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-		JScrollBar verticalScrollBar = getScrollPane().getVerticalScrollBar();
+		styleScrollBar(getScrollPane().getVerticalScrollBar());
+	}
+
+	/** The panel's slim grey-on-dark scrollbar, also used by the History dropdowns' lists. */
+	private static void styleScrollBar(JScrollBar verticalScrollBar)
+	{
 		verticalScrollBar.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		verticalScrollBar.setPreferredSize(new Dimension(8, 0));
 		verticalScrollBar.setUnitIncrement(16);
@@ -1014,6 +1023,57 @@ public class BossTrackerPanel extends PluginPanel
 	}
 
 	private static final Color BUTTON_SELECTED_COLOR = new Color(77, 77, 77);
+
+	/**
+	 * Dark dropdowns to match {@link #styleButton}: left to the look and feel, the closed box and
+	 * its popup list render light against the panel.
+	 */
+	private static void styleComboBox(JComboBox<String> combo)
+	{
+		combo.setFont(FontManager.getRunescapeSmallFont());
+		combo.setFocusable(false);
+		combo.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		combo.setForeground(Color.WHITE);
+		combo.putClientProperty("FlatLaf.style",
+			"background: #282828; foreground: #ffffff; buttonBackground: #282828; buttonArrowColor: #c6c6c6; "
+				+ "buttonHoverArrowColor: #ffffff; borderColor: #282828; focusedBorderColor: #282828; "
+				+ "popupBackground: #1e1e1e; selectionBackground: #4d4d4d; selectionForeground: #ffffff; "
+				+ "focusWidth: 0; innerFocusWidth: 0;");
+		combo.setRenderer(new DefaultListCellRenderer()
+		{
+			@Override
+			public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+				boolean isSelected, boolean cellHasFocus)
+			{
+				super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+				setFont(FontManager.getRunescapeSmallFont());
+				setBackground(isSelected ? BUTTON_SELECTED_COLOR : ColorScheme.DARKER_GRAY_COLOR);
+				setForeground(Color.WHITE);
+				setBorder(new EmptyBorder(2, 4, 2, 4));
+				return this;
+			}
+		});
+
+		// The open list and its scrollbar otherwise keep light look-and-feel defaults.
+		Object popup = combo.getUI().getAccessibleChild(combo, 0);
+		if (popup instanceof BasicComboPopup)
+		{
+			JList<?> list = ((BasicComboPopup) popup).getList();
+			list.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+			list.setForeground(Color.WHITE);
+			list.setSelectionBackground(BUTTON_SELECTED_COLOR);
+			list.setSelectionForeground(Color.WHITE);
+			((BasicComboPopup) popup).setBorder(new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49)));
+
+			JScrollPane scrollPane = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, list);
+			if (scrollPane != null)
+			{
+				scrollPane.setBorder(null);
+				scrollPane.getViewport().setBackground(ColorScheme.DARKER_GRAY_COLOR);
+				styleScrollBar(scrollPane.getVerticalScrollBar());
+			}
+		}
+	}
 
 	private static void styleButton(AbstractButton button)
 	{
@@ -1960,8 +2020,7 @@ public class BossTrackerPanel extends PluginPanel
 
 		for (JComboBox<String> combo : Arrays.asList(historyBossFilter, historySortOrder))
 		{
-			combo.setFont(FontManager.getRunescapeSmallFont());
-			combo.setFocusable(false);
+			styleComboBox(combo);
 		}
 		historyBossFilter.setToolTipText("Show one boss's sessions");
 		historySortOrder.setToolTipText("Newest first groups sessions by day");
