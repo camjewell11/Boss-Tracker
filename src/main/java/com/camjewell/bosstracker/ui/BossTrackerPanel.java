@@ -1610,14 +1610,17 @@ public class BossTrackerPanel extends PluginPanel
 			dryText = streak.getKills() + " kills";
 		}
 
-		String lastText = streak.hasUnique()
-			? priceCache.getName(streak.getLastUniqueItemId()) + " ("
-				+ HISTORY_DAY_FORMAT.format(Instant.ofEpochMilli(streak.getLastUniqueAtEpochMilli())) + ")"
-			: "None in saved sessions";
 		JLabel dryLabel = new JLabel(htmlLabel("Dry Streak: ", dryText));
-		JLabel lastLabel = new JLabel(htmlLabel("Last Unique: ", lastText));
 		dryLabel.setToolTipText("Kills since a pet, raid cosmetic, or drop worth 1m+ each, from saved sessions");
-		return createStatsPanel(dryLabel, lastLabel);
+		if (!streak.hasUnique())
+		{
+			return createStatsPanel(dryLabel, new JLabel(htmlLabel("Last Unique: ", "None in saved sessions")));
+		}
+		// The date gets its own line: beside a long item name it wraps.
+		JLabel lastLabel = new JLabel(htmlLabel("Last Unique: ", priceCache.getName(streak.getLastUniqueItemId())));
+		JLabel dateLabel = new JLabel(htmlLabel("Dropped: ",
+			HISTORY_DAY_FORMAT.format(Instant.ofEpochMilli(streak.getLastUniqueAtEpochMilli()))));
+		return createStatsPanel(dryLabel, lastLabel, dateLabel);
 	}
 
 	/**
