@@ -1508,9 +1508,14 @@ public class BossTrackerPanel extends PluginPanel
 			JLabel totalGpLabel = new JLabel(htmlLabel("Total GP: ", GpFormat.compact(totalGp)));
 			detailPanel.add(createStatsPanel(gpPerKillLabel, totalGpLabel));
 
+			// Highest value first, like the session and History grids.
+			List<Map.Entry<Integer, Integer>> items = new ArrayList<>(lootMap.entrySet());
+			items.sort(Comparator.comparingDouble((Map.Entry<Integer, Integer> item) ->
+				(double) priceCache.getPrice(item.getKey()) * item.getValue()).reversed());
+
 			JPanel lootGrid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
 			lootGrid.setOpaque(false);
-			for (Map.Entry<Integer, Integer> item : lootMap.entrySet())
+			for (Map.Entry<Integer, Integer> item : items)
 			{
 				JLabel itemLabel = new JLabel();
 				itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
@@ -1520,6 +1525,7 @@ public class BossTrackerPanel extends PluginPanel
 
 				JPanel slot = new JPanel(new BorderLayout());
 				slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+				slot.setBorder(new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49)));
 				slot.setPreferredSize(new Dimension(40, 40));
 				slot.add(itemLabel, BorderLayout.CENTER);
 				lootGrid.add(slot);
