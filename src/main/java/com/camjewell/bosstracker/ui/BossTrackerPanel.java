@@ -2248,18 +2248,6 @@ public class BossTrackerPanel extends PluginPanel
 			lootStatsRow.add(gpPerKillLabel);
 			lootStatsRow.add(totalGpLabel);
 			lootSection.add(lootStatsRow);
-			if (entry.getItemPricesAtDrop() == null || entry.getItemPricesAtDrop().isEmpty())
-			{
-				// Wrapped so it shares the stats row's alignment within this BoxLayout.
-				JLabel priceNote = new JLabel("Valued at today's prices (saved before drop prices were kept)");
-				priceNote.setFont(FontManager.getRunescapeSmallFont());
-				priceNote.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-				JPanel priceNoteRow = new JPanel(new BorderLayout());
-				priceNoteRow.setOpaque(false);
-				priceNoteRow.setBorder(new EmptyBorder(4, 0, 0, 0));
-				priceNoteRow.add(priceNote, BorderLayout.CENTER);
-				lootSection.add(priceNoteRow);
-			}
 			lootSection.add(Box.createRigidArea(new Dimension(0, 10)));
 
 			JPanel lootGrid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
