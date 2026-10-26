@@ -9,7 +9,7 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 /**
- * Messages copied from the RuneLite log of a clear on 2026-10-23.
+ * Messages copied from the RuneLite log of Fractured Archive runs.
  */
 public class ChatKillParserArchiveTest
 {
@@ -39,6 +39,29 @@ public class ChatKillParserArchiveTest
 		assertEquals(1, ChatKillParser.parseKillCount(message));
 		assertEquals(Boss.TOA_NORMAL,
 			ChatKillParser.findKcBoss("Your completed Tombs of Amascut count is: <col=ff0000>3</col>.", KINGS));
+	}
+
+	@Test
+	public void runStartAndWipe()
+	{
+		assertTrue(ChatKillParser.isFracturedArchiveStart("You enter the Archive..."));
+		assertTrue(ChatKillParser.isFracturedArchiveWipe("You failed to survive the Fractured Archive."));
+		assertFalse(ChatKillParser.isFracturedArchiveStart("Axecutioner has entered the Fractured Archive. Step inside to join him..."));
+		assertFalse(ChatKillParser.isFracturedArchiveWipe("You leave the Fractured Archive."));
+	}
+
+	@Test
+	public void raidDeaths()
+	{
+		String teammate = "<col=ff0000>Axecutioner</col> has died. Total deaths: <col=ff0000>1</col>.";
+		String own = "You have died. Total deaths: <col=ff0000>3</col>.";
+		assertEquals(Integer.valueOf(1), ChatKillParser.parseRaidTotalDeaths(teammate));
+		assertEquals(Integer.valueOf(3), ChatKillParser.parseRaidTotalDeaths(own));
+		assertFalse(ChatKillParser.isOwnRaidDeath(teammate));
+		assertTrue(ChatKillParser.isOwnRaidDeath(own));
+
+		assertNull(ChatKillParser.parseRaidTotalDeaths("You will respawn when your party completes or fails the challenge."));
+		assertNull(ChatKillParser.parseRaidTotalDeaths("Oh dear, you are dead!"));
 	}
 
 	@Test

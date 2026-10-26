@@ -136,6 +136,8 @@ public class BossTrackerPanel extends PluginPanel
 	private final JLabel avgKillLabel = new JLabel(htmlLabel("Average Kill: ", "N/A"));
 	private final JLabel fastestKillLabel = new JLabel(htmlLabel("Fastest Kill: ", "N/A"));
 	private final JLabel idleTimeLabel = new JLabel(htmlLabel("Idle Time: ", "N/A"));
+	private final JLabel teamDeathsLabel = new JLabel(htmlLabel("Team Deaths: ", "N/A"));
+	private final JPanel sessionInfoSection = new JPanel();
 	private final JLabel sessionTimeLabel = new JLabel(htmlLabel("Session Time: ", "N/A"));
 	private final JLabel tripLabel = new JLabel(htmlLabel("Trip: ", "N/A"));
 	private final JLabel killsPerTripLabel = new JLabel(htmlLabel("Kills/Trip: ", "N/A"));
@@ -509,7 +511,9 @@ public class BossTrackerPanel extends PluginPanel
 		bossInfoPanel.setOpaque(false);
 		bossInfoPanel.setBorder(new EmptyBorder(0, 0, 4, 0));
 
-		JPanel sessionInfoSection = new JPanel(new GridLayout(9, 1, 0, 10));
+		// One row per label. A grid lays out hidden components too, so Team Deaths is added only
+		// while it's shown (see showTeamDeaths) rather than hidden.
+		sessionInfoSection.setLayout(new GridLayout(0, 1, 0, 10));
 		sessionInfoSection.setBorder(new EmptyBorder(10, 5, 3, 0));
 		sessionInfoSection.setOpaque(false);
 
@@ -533,6 +537,7 @@ public class BossTrackerPanel extends PluginPanel
 		sessionInfoSection.add(sessionTimeLabel);
 		sessionInfoSection.add(tripLabel);
 		sessionInfoSection.add(killsPerTripLabel);
+		teamDeathsLabel.setToolTipText("Deaths across this session's clears; runs that wipe aren't counted");
 
 		bossInfoPanel.add(bossIconLabel, BorderLayout.EAST);
 		bossInfoPanel.add(sessionInfoSection, BorderLayout.WEST);
@@ -1246,6 +1251,7 @@ public class BossTrackerPanel extends PluginPanel
 			sessionTimeLabel.setText(htmlLabel("Session Time: ", "N/A"));
 			tripLabel.setText(htmlLabel("Trip: ", "N/A"));
 			killsPerTripLabel.setText(htmlLabel("Kills/Trip: ", "N/A"));
+			showTeamDeaths(false);
 			pauseResumeButton.setText("Pause");
 			calcModeButton.setText("Actual");
 			refreshGoalsPanel(null);
@@ -1270,6 +1276,8 @@ public class BossTrackerPanel extends PluginPanel
 
 		tripLabel.setText(htmlLabel("Trip: ", formatCurrentTrip(display)));
 		killsPerTripLabel.setText(htmlLabel("Kills/Trip: ", formatKillsPerTrip(display)));
+		showTeamDeaths(display.getBoss().tracksTeamDeaths());
+		teamDeathsLabel.setText(htmlLabel("Team Deaths: ", formatTeamDeaths(display.getTeamDeaths(), display.getOwnDeaths())));
 
 		pauseResumeButton.setText(session != null && session.isPaused() ? "Resume" : "Pause");
 		calcModeButton.setText(display.getCalcMode() == CalcMode.VIRTUAL ? "Virtual" : "Actual");
@@ -1320,6 +1328,32 @@ public class BossTrackerPanel extends PluginPanel
 			return "N/A";
 		}
 		return String.format("%.1f (%d %s)", (double) kills / finished, finished, finished == 1 ? "trip" : "trips");
+	}
+
+	/** Adds the Team Deaths row to the session section, or takes it away. */
+	private void showTeamDeaths(boolean show)
+	{
+		boolean shown = teamDeathsLabel.getParent() == sessionInfoSection;
+		if (show == shown)
+		{
+			return;
+		}
+		if (show)
+		{
+			sessionInfoSection.add(teamDeathsLabel);
+		}
+		else
+		{
+			sessionInfoSection.remove(teamDeathsLabel);
+		}
+		sessionInfoSection.revalidate();
+		sessionInfoSection.repaint();
+	}
+
+	/** "5 (you 2)": the team's deaths, then the player's own share of them. */
+	private static String formatTeamDeaths(int teamDeaths, int ownDeaths)
+	{
+		return teamDeaths + " (you " + ownDeaths + ")";
 	}
 
 	private void refreshSearchPanel()
@@ -2305,7 +2339,18 @@ public class BossTrackerPanel extends PluginPanel
 		JLabel avgKillStatLabel = new JLabel(htmlLabel("Average Kill: ", TimeFormat.minutesSeconds(entry.getAverageKillTimeSeconds())));
 		JLabel fastestKillStatLabel = new JLabel(htmlLabel("Fastest Kill: ", TimeFormat.minutesSeconds(entry.getFastestKillSeconds())));
 		JLabel idleTimeStatLabel = new JLabel(htmlLabel("Idle Time: ", TimeFormat.minutesSeconds(entry.getIdleSeconds())));
-		detailPanel.add(createStatsPanel(kphStatLabel, sessionTimeStatLabel, avgKillStatLabel, fastestKillStatLabel, idleTimeStatLabel));
+		Boss entryBoss = Boss.byName(entry.getBossName());
+		if (entryBoss != null && entryBoss.tracksTeamDeaths())
+		{
+			JLabel teamDeathsStatLabel = new JLabel(htmlLabel("Team Deaths: ", formatTeamDeaths(entry.getTeamDeaths(), entry.getOwnDeaths())));
+			teamDeathsStatLabel.setToolTipText("Deaths across this session's clears; runs that wipe aren't counted");
+			detailPanel.add(createStatsPanel(kphStatLabel, sessionTimeStatLabel, avgKillStatLabel, fastestKillStatLabel, idleTimeStatLabel,
+				teamDeathsStatLabel));
+		}
+		else
+		{
+			detailPanel.add(createStatsPanel(kphStatLabel, sessionTimeStatLabel, avgKillStatLabel, fastestKillStatLabel, idleTimeStatLabel));
+		}
 		detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
 
 		if (entry.getTrips() != null && !entry.getTrips().isEmpty())

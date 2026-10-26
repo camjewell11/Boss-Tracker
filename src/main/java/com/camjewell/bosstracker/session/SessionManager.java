@@ -119,6 +119,14 @@ public class SessionManager
 	private Integer pendingDurationSeconds;
 	private Instant pendingSelfReportedSince;
 
+	/**
+	 * The Fractured Archive run in progress: true from its start until it's cleared or wiped,
+	 * with the team's deaths so far (the game's running total) and the player's own.
+	 */
+	private boolean inArchiveRun;
+	private int archiveRunTeamDeaths;
+	private int archiveRunOwnDeaths;
+
 	private Executor asyncExecutor;
 
 	/**
@@ -137,6 +145,11 @@ public class SessionManager
 		if (ChatKillParser.isOwnPetMessage(message))
 		{
 			onPetObtained();
+			return;
+		}
+
+		if (trackArchiveRun(message))
+		{
 			return;
 		}
 
@@ -192,6 +205,44 @@ public class SessionManager
 		{
 			log.debug("Awaiting duration for pendingBoss={}, unmatched message=\"{}\"", pendingSelfReportedBoss, message);
 		}
+	}
+
+	/**
+	 * Follows a Fractured Archive run's start, deaths and wipe, so a clear can add its deaths to
+	 * the session. Deaths outside a run are ignored, so another raid's death messages can't count.
+	 *
+	 * @return true if the message was one of these and needs no further handling
+	 */
+	private boolean trackArchiveRun(String message)
+	{
+		if (ChatKillParser.isFracturedArchiveStart(message))
+		{
+			inArchiveRun = true;
+			archiveRunTeamDeaths = 0;
+			archiveRunOwnDeaths = 0;
+			return true;
+		}
+		if (ChatKillParser.isFracturedArchiveWipe(message))
+		{
+			log.debug("Fractured Archive run wiped with {} team deaths", archiveRunTeamDeaths);
+			inArchiveRun = false;
+			return true;
+		}
+		if (!inArchiveRun)
+		{
+			return false;
+		}
+		Integer totalDeaths = ChatKillParser.parseRaidTotalDeaths(message);
+		if (totalDeaths == null)
+		{
+			return false;
+		}
+		archiveRunTeamDeaths = totalDeaths;
+		if (ChatKillParser.isOwnRaidDeath(message))
+		{
+			archiveRunOwnDeaths++;
+		}
+		return true;
 	}
 
 	private void markPendingTouched()
@@ -315,6 +366,14 @@ public class SessionManager
 		}
 
 		session.setKillsThisSession(session.getKillsThisSession() + 1);
+		if (boss.tracksTeamDeaths())
+		{
+			session.setTeamDeaths(session.getTeamDeaths() + archiveRunTeamDeaths);
+			session.setOwnDeaths(session.getOwnDeaths() + archiveRunOwnDeaths);
+			inArchiveRun = false;
+			archiveRunTeamDeaths = 0;
+			archiveRunOwnDeaths = 0;
+		}
 		recordTripKill(durationSeconds);
 		session.setKillCount(killCount);
 
@@ -962,6 +1021,8 @@ public class SessionManager
 		entry.setIdleSeconds(endedSession.getIdleSeconds());
 		entry.setOnSlayerTask(endedSession.isOnSlayerTask());
 		entry.setPetObtained(endedSession.isPetObtained());
+		entry.setTeamDeaths(endedSession.getTeamDeaths());
+		entry.setOwnDeaths(endedSession.getOwnDeaths());
 		entry.setLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionLoot()));
 		// Every trip is closed by now: each path that ends a session closes the open trip first.
 		entry.setTrips(new ArrayList<>(endedSession.getTrips()));

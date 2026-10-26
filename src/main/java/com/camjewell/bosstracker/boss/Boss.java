@@ -333,6 +333,14 @@ public enum Boss
 	}
 
 	/**
+	 * @return true where each run's team deaths are counted, from the raid's "Total deaths" chat.
+	 */
+	public boolean tracksTeamDeaths()
+	{
+		return this == FRACTURED_ARCHIVE;
+	}
+
+	/**
 	 * @return whether leaving this boss's learned area ends a trip. Barrows is excluded: its kill
 	 * is the chest in the tunnels, so the crypts and hills above are never learned, and walking
 	 * between mounds would end the trip. Death and banking still end its trips.

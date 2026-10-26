@@ -28,6 +28,14 @@ public class SessionHistoryEntry
 	private boolean onSlayerTask;
 	/** A pet dropped during the session. False for entries saved before this was recorded. */
 	private boolean petObtained;
+
+	/**
+	 * Deaths across the session's clears: the whole team's, and the player's own. Only counted
+	 * for bosses that track team deaths; 0 for everything else and for older entries.
+	 */
+	private int teamDeaths;
+	private int ownDeaths;
+
 	private Map<Integer, Integer> lootItemQuantities = new LinkedHashMap<>();
 
 	/**

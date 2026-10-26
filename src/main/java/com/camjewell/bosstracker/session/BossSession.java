@@ -52,6 +52,13 @@ public class BossSession
 	/** Set when the player's own pet-drop message arrives during the session. */
 	private boolean petObtained;
 
+	/**
+	 * Deaths across the session's clears, for bosses where {@link Boss#tracksTeamDeaths()}: the
+	 * whole team's, and the player's own. Runs that wipe add nothing.
+	 */
+	private int teamDeaths;
+	private int ownDeaths;
+
 	/** Oldest first; the last one is still open unless a death, bank or the session ended it. */
 	private final List<Trip> trips = new ArrayList<>();
 

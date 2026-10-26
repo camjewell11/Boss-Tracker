@@ -5,6 +5,8 @@ import com.camjewell.bosstracker.boss.Boss;
 import com.camjewell.bosstracker.boss.TimingFamily;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Recognizes kill-count, kill-duration, and early-start-trigger chat messages and resolves them
@@ -29,6 +31,14 @@ public final class ChatKillParser
 		"The Fractured Archive: Total completion time:",
 		"Colosseum duration:"
 	);
+
+	/**
+	 * A raid death, with the run's running total for the whole team:
+	 * "<col=ff0000>Axecutioner</col> has died. Total deaths: <col=ff0000>1</col>." or, for the player,
+	 * "You have died. Total deaths: <col=ff0000>3</col>.". Seen in-game in the Fractured Archive.
+	 */
+	private static final Pattern RAID_DEATH = Pattern.compile(
+		"(?:has died|^You have died)\\. Total deaths: (?:<col=[0-9a-f]+>)?([\\d,]+)");
 
 	private ChatKillParser()
 	{
@@ -189,6 +199,34 @@ public final class ChatKillParser
 			return message;
 		}
 		return null;
+	}
+
+	/** @return true for the message each Fractured Archive run starts with. */
+	public static boolean isFracturedArchiveStart(String message)
+	{
+		return message.startsWith("You enter the Archive");
+	}
+
+	/** @return true when the whole team has died, ending a Fractured Archive run without a clear. */
+	public static boolean isFracturedArchiveWipe(String message)
+	{
+		return message.startsWith("You failed to survive the Fractured Archive");
+	}
+
+	/**
+	 * @return the team's total deaths so far this run from a raid death message, or null if the
+	 * message isn't one
+	 */
+	public static Integer parseRaidTotalDeaths(String message)
+	{
+		Matcher m = RAID_DEATH.matcher(message);
+		return m.find() ? Integer.parseInt(m.group(1).replace(",", "")) : null;
+	}
+
+	/** @return true when a raid death message is the player's own. */
+	public static boolean isOwnRaidDeath(String message)
+	{
+		return message.startsWith("You have died. Total deaths:");
 	}
 
 	/**
