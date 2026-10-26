@@ -42,20 +42,6 @@ public class ChatKillParserArchiveTest
 	}
 
 	@Test
-	public void archiveActivity()
-	{
-		assertTrue(ChatKillParser.isFracturedArchiveActivity("Axecutioner has entered the Fractured Archive. Step inside to join him..."));
-		assertTrue(ChatKillParser.isFracturedArchiveActivity("You enter the Archive..."));
-		assertTrue(ChatKillParser.isFracturedArchiveActivity("Challenge started: Archive Guardian."));
-		assertTrue(ChatKillParser.isFracturedArchiveActivity("Scuffed Boi has proceeded to face Dreadnoth the Jellied. Join him..."));
-		assertTrue(ChatKillParser.isFracturedArchiveActivity("Scuffed Boi has proceeded to the inner vault. Join him..."));
-		assertTrue(ChatKillParser.isFracturedArchiveActivity("You failed to survive the Fractured Archive."));
-
-		assertFalse(ChatKillParser.isFracturedArchiveActivity("Challenge started: Path of Het."));
-		assertFalse(ChatKillParser.isFracturedArchiveActivity("You have died. Total deaths: <col=ff0000>3</col>."));
-	}
-
-	@Test
 	public void durationsOverAnHour()
 	{
 		assertEquals(Integer.valueOf(3600 + 2 * 60 + 3), ChatKillParser.parseDurationSeconds(

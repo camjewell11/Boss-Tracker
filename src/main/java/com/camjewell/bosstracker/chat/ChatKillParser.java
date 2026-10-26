@@ -30,15 +30,6 @@ public final class ChatKillParser
 		"Colosseum duration:"
 	);
 
-	/**
-	 * The Fractured Archive's rooms, as chat names them. One boss is picked from each pair:
-	 * Archive Guardian, then Ezekiel or Bork, Moia or Dreadnoth the Jellied, Dagon'hai or Xarth,
-	 * and Ocellus last. Room messages also use "Challenge started/complete:" in Tombs of Amascut,
-	 * so they only count as Archive activity when they name one of these.
-	 */
-	private static final List<String> ARCHIVE_ROOMS = Arrays.asList(
-		"Archive Guardian", "Ezekiel", "Bork", "Moia", "Dreadnoth the Jellied", "Dagon'hai", "Xarth", "Ocellus");
-
 	private ChatKillParser()
 	{
 	}
@@ -198,28 +189,6 @@ public final class ChatKillParser
 			return message;
 		}
 		return null;
-	}
-
-	/**
-	 * @return true for chat that shows the player is running the Fractured Archive: entering or
-	 * failing it, and each room starting, finishing or being moved on to.
-	 */
-	public static boolean isFracturedArchiveActivity(String message)
-	{
-		if (message.contains("Fractured Archive") || message.startsWith("You enter the Archive")
-			|| message.contains("proceeded to the inner vault"))
-		{
-			return true;
-		}
-		for (String room : ARCHIVE_ROOMS)
-		{
-			if (message.startsWith("Challenge started: " + room) || message.startsWith("Challenge complete: " + room)
-				|| message.contains("proceeded to face " + room))
-			{
-				return true;
-			}
-		}
-		return false;
 	}
 
 	/**

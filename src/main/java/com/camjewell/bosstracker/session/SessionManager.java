@@ -140,14 +140,6 @@ public class SessionManager
 			return;
 		}
 
-		if (session != null && session.getBoss() == Boss.FRACTURED_ARCHIVE
-			&& ChatKillParser.isFracturedArchiveActivity(message))
-		{
-			// No varbit is known yet for being in the Archive, so its chat stands in for one:
-			// runs that wipe still count as raiding (see checkSessionTimeout).
-			lastRaidPresence = Instant.now();
-		}
-
 		boolean resumedByThisMessage = false;
 		if (session != null && session.isPaused()
 			&& ChatKillParser.isRecognizedBossMessage(message, config.dksSelector(), inFightCavesOrInferno))
@@ -587,8 +579,9 @@ public class SessionManager
 	}
 
 	/**
-	 * @return true while the player is taking part in {@code boss}'s raid. For ToB and ToA, being
-	 * in a party counts, so regearing between runs with the same team keeps a session alive; for
+	 * @return true while the player is taking part in {@code boss}'s raid. For ToB, ToA and the
+	 * Fractured Archive, being in a party counts, so regearing between runs with the same team
+	 * keeps a session alive; for
 	 * CoX, which has no party varbit, only being inside the raid does. Always false for non-raids.
 	 */
 	private boolean isRaidingFor(Boss boss)
@@ -607,6 +600,9 @@ public class SessionManager
 			case TOA_NORMAL:
 			case TOA_EXPERT:
 				varbit = VarbitID.TOA_CLIENT_PARTYSTATUS;
+				break;
+			case FRACTURED_ARCHIVE:
+				varbit = VarbitID.TFA_CLIENT_PARTYSTATUS;
 				break;
 			default:
 				return false;
