@@ -2105,7 +2105,9 @@ public class BossTrackerPanel extends PluginPanel
 		tiers.sort(Comparator.comparingLong(tier -> GpValue.parse(historyTierValue(tier))));
 		for (int tier : tiers)
 		{
-			historyLegendPanel.add(legendLabel(historyTierValue(tier).trim() + "+", historyTierColor(tier)));
+			// Values can be typed in full ("3000000"), which wouldn't fit the key.
+			String value = GpFormat.shorthand(GpValue.parse(historyTierValue(tier)));
+			historyLegendPanel.add(legendLabel(value + "+", historyTierColor(tier)));
 		}
 		historyLegendPanel.add(legendLabel("Pet", PET_GOLD));
 		historyLegendPanel.setToolTipText("Row colours: the highest tier a session's loot reaches. A fade into gold means a pet dropped.");
