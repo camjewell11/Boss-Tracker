@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import net.runelite.client.util.Text;
 
 /**
  * Recognizes kill-count, kill-duration, and early-start-trigger chat messages and resolves them
@@ -48,11 +49,13 @@ public final class ChatKillParser
 	 * @return true for the game's message to the player that they received a pet: following them,
 	 * sneaking into their backpack, or the "would have been followed" duplicate. Other players'
 	 * broadcasts use their name ("has a funny feeling like she's being followed") and don't match.
+	 * The game colours the message, so tags are stripped first.
 	 */
 	public static boolean isOwnPetMessage(String message)
 	{
-		return message.startsWith("You have a funny feeling like you")
-			|| message.startsWith("You feel something weird sneaking into your backpack");
+		String plain = Text.removeTags(message);
+		return plain.startsWith("You have a funny feeling like you")
+			|| plain.startsWith("You feel something weird sneaking into your backpack");
 	}
 
 	/**

@@ -15,6 +15,14 @@ public class ChatKillParserPetTest
 	}
 
 	@Test
+	public void recognisesTheColouredMessageAsSent()
+	{
+		// Copied from the RuneLite log when Orion dropped.
+		assertTrue(ChatKillParser.isOwnPetMessage("<col=ef1020>You have a funny feeling like you're being followed.</col>"));
+		assertTrue(ChatKillParser.isOwnPetMessage("<col=ef1020>You have a funny feeling like you would have been followed...</col>"));
+	}
+
+	@Test
 	public void ignoresOtherPlayersBroadcasts()
 	{
 		// Copied from clan broadcasts in the RuneLite log.
