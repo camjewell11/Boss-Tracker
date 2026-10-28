@@ -213,6 +213,13 @@ public class BossTrackerPanel extends PluginPanel
 	/** Set while the boss filter's choices are rebuilt, so that doesn't count as the user picking one. */
 	private boolean updatingHistoryFilters;
 	private int lastRenderedHistoryFilter;
+	/**
+	 * Sessions listed before a "Show more" button. Every row is several Swing components, so years
+	 * of sessions listed at once would make opening History or changing a filter stutter.
+	 */
+	private static final int HISTORY_PAGE_SIZE = 200;
+	private int historyRowLimit = HISTORY_PAGE_SIZE;
+	private int searchRowLimit = HISTORY_PAGE_SIZE;
 	private final JPanel searchViewPanel = new JPanel();
 	private int lastRenderedHistoryVersion = -1;
 	private int lastRenderedHistoryHighlight;
@@ -1364,6 +1371,10 @@ public class BossTrackerPanel extends PluginPanel
 		{
 			return;
 		}
+		if (!Objects.equals(searchQuery, lastRenderedSearchQuery))
+		{
+			searchRowLimit = HISTORY_PAGE_SIZE;
+		}
 		lastRenderedLookupVersion = lookupManager.getVersion();
 		lastRenderedSearchHistoryVersion = historyManager.getVersion();
 		lastRenderedSearchQuery = searchQuery;
@@ -1389,7 +1400,13 @@ public class BossTrackerPanel extends PluginPanel
 				{
 					searchResultPanel.add(buildDateRangeHeader(searchRange, rangeSessions));
 				}
-				addSessionsByDay(searchResultPanel, rangeSessions);
+				int hidden = addSessionsByDay(searchResultPanel, rangeSessions, searchRowLimit);
+				addShowMoreButton(searchResultPanel, hidden, () ->
+				{
+					searchRowLimit += HISTORY_PAGE_SIZE;
+					lastRenderedLookupVersion = -1;
+					refreshSearchPanel();
+				});
 			}
 		}
 
@@ -1909,6 +1926,10 @@ public class BossTrackerPanel extends PluginPanel
 		{
 			return;
 		}
+		if (filterSignature != lastRenderedHistoryFilter)
+		{
+			historyRowLimit = HISTORY_PAGE_SIZE;
+		}
 		lastRenderedHistoryVersion = historyManager.getVersion();
 		lastRenderedHistoryHighlight = highlightSignature;
 		lastRenderedHistoryFilter = filterSignature;
@@ -1930,17 +1951,29 @@ public class BossTrackerPanel extends PluginPanel
 			emptyLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
 			historyEntriesPanel.add(emptyLabel);
 		}
-		else if (SORT_VALUE.equals(historySortOrder.getSelectedItem()))
-		{
-			shown.sort(Comparator.comparingDouble(this::historyLootValue).reversed());
-			for (SessionHistoryEntry entry : shown)
-			{
-				historyEntriesPanel.add(buildHistoryEntryPanel(entry));
-			}
-		}
 		else
 		{
-			addSessionsByDay(historyEntriesPanel, shown);
+			int hidden;
+			if (SORT_VALUE.equals(historySortOrder.getSelectedItem()))
+			{
+				shown.sort(Comparator.comparingDouble(this::historyLootValue).reversed());
+				List<SessionHistoryEntry> page = shown.subList(0, Math.min(shown.size(), historyRowLimit));
+				for (SessionHistoryEntry entry : page)
+				{
+					historyEntriesPanel.add(buildHistoryEntryPanel(entry));
+				}
+				hidden = shown.size() - page.size();
+			}
+			else
+			{
+				hidden = addSessionsByDay(historyEntriesPanel, shown, historyRowLimit);
+			}
+			addShowMoreButton(historyEntriesPanel, hidden, () ->
+			{
+				historyRowLimit += HISTORY_PAGE_SIZE;
+				lastRenderedHistoryVersion = -1;
+				refreshHistoryPanel();
+			});
 		}
 
 		historyEntriesPanel.revalidate();
@@ -1952,8 +1985,14 @@ public class BossTrackerPanel extends PluginPanel
 		return Instant.ofEpochMilli(entry.getEndedAtEpochMilli()).atZone(ZoneId.systemDefault()).toLocalDate();
 	}
 
-	/** Adds sessions newest first, each day under a header with its session count and total. */
-	private void addSessionsByDay(JPanel target, List<SessionHistoryEntry> sessions)
+	/**
+	 * Adds sessions newest first, each day under a header with its session count and total. Stops
+	 * at the first day that starts at or past {@code limit} sessions, so a day is never split and
+	 * its header always matches its rows.
+	 *
+	 * @return how many sessions were left out
+	 */
+	private int addSessionsByDay(JPanel target, List<SessionHistoryEntry> sessions, int limit)
 	{
 		List<SessionHistoryEntry> newestFirst = new ArrayList<>(sessions);
 		newestFirst.sort(Comparator.comparingLong(SessionHistoryEntry::getEndedAtEpochMilli).reversed());
@@ -1962,14 +2001,47 @@ public class BossTrackerPanel extends PluginPanel
 		{
 			days.computeIfAbsent(sessionDay(entry), d -> new ArrayList<>()).add(entry);
 		}
+		int added = 0;
 		for (List<SessionHistoryEntry> day : days.values())
 		{
+			if (added >= limit)
+			{
+				break;
+			}
 			target.add(buildHistoryDayHeader(day));
 			for (SessionHistoryEntry entry : day)
 			{
 				target.add(buildHistoryEntryPanel(entry));
 			}
+			added += day.size();
 		}
+		return sessions.size() - added;
+	}
+
+	/** A full-width "Show more" button under a list that left {@code hidden} sessions out. */
+	private void addShowMoreButton(JPanel target, int hidden, Runnable showMore)
+	{
+		if (hidden <= 0)
+		{
+			return;
+		}
+		JButton button = new JButton("Show more (" + hidden + (hidden == 1 ? " session hidden)" : " sessions hidden)"));
+		styleButton(button);
+		button.setFont(FontManager.getRunescapeSmallFont());
+		button.addActionListener(e -> showMore.run());
+
+		JPanel row = new JPanel(new BorderLayout())
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		row.setOpaque(false);
+		row.setBorder(new EmptyBorder(4, 0, 4, 0));
+		row.add(button, BorderLayout.CENTER);
+		target.add(row);
 	}
 
 	private List<SessionHistoryEntry> filterHistory(List<SessionHistoryEntry> entries)
