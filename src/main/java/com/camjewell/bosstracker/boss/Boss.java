@@ -213,8 +213,7 @@ public enum Boss
 
 	/**
 	 * Pet items for bosses whose icon isn't their pet. -1 where there's no single pet item: no
-	 * pet at all, or where the message doesn't say which pet: the combined Dagannoth Kings, and
-	 * the Fractured Archive, whose every boss has its own.
+	 * pet at all, or where the message doesn't say which pet: the combined Dagannoth Kings.
 	 */
 	private static final Map<Boss, Integer> PET_ITEM_OVERRIDES = new EnumMap<>(Boss.class);
 
@@ -239,7 +238,6 @@ public enum Boss
 		PET_ITEM_OVERRIDES.put(CRAZY_ARCHAEOLOGIST, -1);
 		PET_ITEM_OVERRIDES.put(DERANGED_ARCHAEOLOGIST, -1);
 		PET_ITEM_OVERRIDES.put(DAGANNOTH_KINGS, -1);
-		PET_ITEM_OVERRIDES.put(FRACTURED_ARCHIVE, -1);
 		PET_ITEM_OVERRIDES.put(CHAOS_FANATIC, ItemID.CHAOSELEPET);
 		PET_ITEM_OVERRIDES.put(THEATRE_OF_BLOOD_HM, ItemID.VERZIKPET);
 

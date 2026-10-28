@@ -17,8 +17,9 @@ public final class NotableDrops
 	public static final long MIN_UNIT_GP = 1_000_000;
 
 	/**
-	 * Raid cosmetics: several are worth well under the threshold or can't be traded at all, but
-	 * are still rare uniques. In-game names noted, since several gameval names don't resemble them.
+	 * Raid cosmetics and other rare raid drops: several are worth well under the threshold or can't
+	 * be traded at all, but are still uniques. In-game names noted, since several gameval names
+	 * don't resemble them.
 	 */
 	private static final Set<Integer> RAID_COSMETICS = new HashSet<>(Arrays.asList(
 		ItemID.ANCESTRAL_ROBES_TWISTED_KIT,     // Twisted ancestral colour kit (CoX)
@@ -36,7 +37,11 @@ public final class NotableDrops
 		ItemID.TOA_PET_MORPH_BABA,              // Remnant of Ba-Ba (ToA)
 		ItemID.TOA_PET_MORPH_KEPHRI,            // Remnant of Kephri (ToA)
 		ItemID.TOA_PET_MORPH_ZEBAK,             // Remnant of Zebak (ToA)
-		ItemID.TOA_PET_MORPH_WARDENS));         // Ancient remnant (ToA)
+		ItemID.TOA_PET_MORPH_WARDENS,           // Ancient remnant (ToA)
+		ItemID.TFA_MOTE_AIR,                    // Fragment of whispering wind (Fractured Archive)
+		ItemID.TFA_MOTE_WATER,                  // Fragment of deep water (Fractured Archive)
+		ItemID.TFA_MOTE_EARTH,                  // Fragment of living earth (Fractured Archive)
+		ItemID.TFA_MOTE_FIRE));                 // Fragment of burning fire (Fractured Archive)
 
 	private NotableDrops()
 	{
