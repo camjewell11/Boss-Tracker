@@ -2225,8 +2225,9 @@ public class BossTrackerPanel extends PluginPanel
 			totalGp += value;
 		}
 
-		JToggleButton expandButton = new JToggleButton(entry.getBossName() + " - " + entry.getKillsThisSession()
-			+ (entry.getKillsThisSession() == 1 ? " kill" : " kills"));
+		// The kill count sits on the date line so longer boss names fit; the tooltip has both.
+		String killsText = entry.getKillsThisSession() + (entry.getKillsThisSession() == 1 ? " kill" : " kills");
+		JToggleButton expandButton = new JToggleButton(entry.getBossName());
 		expandButton.setHorizontalAlignment(SwingConstants.LEFT);
 		expandButton.setSelected(expandedHistoryEntryIds.contains(entry.getEndedAtEpochMilli()));
 
@@ -2236,7 +2237,10 @@ public class BossTrackerPanel extends PluginPanel
 		{
 			expandButton.setText(gradientHtml(expandButton.getText(), valueColor != null ? valueColor : Color.WHITE, PET_GOLD));
 		}
-		expandButton.setToolTipText(buildNotableDropsTooltip(entry));
+		String title = entry.getBossName() + " - " + killsText;
+		String notableDrops = buildNotableDropsTooltip(entry);
+		expandButton.setToolTipText(notableDrops == null ? title
+			: notableDrops.replaceFirst("<html>", "<html>" + title + "<br><br>"));
 
 		JButton deleteButton = new JButton("✕");
 		deleteButton.setToolTipText("Delete this session");
@@ -2276,7 +2280,7 @@ public class BossTrackerPanel extends PluginPanel
 		headerRow.add(eastControls, BorderLayout.EAST);
 
 		String dateText = HISTORY_DATE_FORMAT.format(Instant.ofEpochMilli(entry.getEndedAtEpochMilli()));
-		JLabel dateLabel = new JLabel(dateText);
+		JLabel dateLabel = new JLabel(dateText + " · " + killsText);
 		dateLabel.setFont(FontManager.getRunescapeSmallFont());
 		dateLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		dateLabel.setBorder(new EmptyBorder(2, 8, 2, 8));
