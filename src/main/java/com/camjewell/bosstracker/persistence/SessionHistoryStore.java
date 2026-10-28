@@ -1,12 +1,9 @@
 package com.camjewell.bosstracker.persistence;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -34,12 +31,9 @@ public class SessionHistoryStore
 
 	public void save(long accountHash, SessionHistoryEntry entry)
 	{
-		File file = entryFile(accountHash, entry);
-		file.getParentFile().mkdirs();
-
 		try
 		{
-			Files.write(file.toPath(), gson.toJson(entry).getBytes(StandardCharsets.UTF_8));
+			JsonFiles.write(entryFile(accountHash, entry), gson.toJson(entry));
 		}
 		catch (IOException e)
 		{
@@ -63,18 +57,11 @@ public class SessionHistoryStore
 
 		for (File file : files)
 		{
-			try
+			// An unreadable file is moved aside, so it isn't retried on every History open.
+			SessionHistoryEntry entry = JsonFiles.read(gson, file, SessionHistoryEntry.class);
+			if (entry != null)
 			{
-				String json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
-				SessionHistoryEntry entry = gson.fromJson(json, SessionHistoryEntry.class);
-				if (entry != null)
-				{
-					entries.add(entry);
-				}
-			}
-			catch (IOException | JsonSyntaxException e)
-			{
-				log.warn("Failed to load session history entry from {}", file.getName(), e);
+				entries.add(entry);
 			}
 		}
 

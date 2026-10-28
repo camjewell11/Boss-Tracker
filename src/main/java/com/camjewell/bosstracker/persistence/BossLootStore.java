@@ -2,11 +2,8 @@ package com.camjewell.bosstracker.persistence;
 
 import com.camjewell.bosstracker.boss.Boss;
 import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +28,7 @@ public class BossLootStore
 
 	public BossLoot load(long accountHash, Boss boss)
 	{
-		BossLoot loot = read(lootFile(accountHash, boss), boss);
+		BossLoot loot = read(lootFile(accountHash, boss));
 		for (String legacyName : boss.getLegacyNames())
 		{
 			File legacy = lootFile(accountHash, legacyName);
@@ -39,7 +36,7 @@ public class BossLootStore
 			{
 				continue;
 			}
-			loot.mergeFrom(read(legacy, boss));
+			loot.mergeFrom(read(legacy));
 			save(accountHash, boss, loot);
 			if (!legacy.renameTo(new File(legacy.getPath() + ".merged")))
 			{
@@ -50,34 +47,17 @@ public class BossLootStore
 		return loot;
 	}
 
-	private BossLoot read(File file, Boss boss)
+	private BossLoot read(File file)
 	{
-		if (!file.exists())
-		{
-			return new BossLoot();
-		}
-
-		try
-		{
-			String json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
-			BossLoot loot = gson.fromJson(json, BossLoot.class);
-			return loot != null ? loot : new BossLoot();
-		}
-		catch (IOException | JsonSyntaxException e)
-		{
-			log.warn("Failed to load boss loot for {}", boss.getBossName(), e);
-			return new BossLoot();
-		}
+		BossLoot loot = JsonFiles.read(gson, file, BossLoot.class);
+		return loot != null ? loot : new BossLoot();
 	}
 
 	public void save(long accountHash, Boss boss, BossLoot loot)
 	{
-		File file = lootFile(accountHash, boss);
-		file.getParentFile().mkdirs();
-
 		try
 		{
-			Files.write(file.toPath(), gson.toJson(loot).getBytes(StandardCharsets.UTF_8));
+			JsonFiles.write(lootFile(accountHash, boss), gson.toJson(loot));
 		}
 		catch (IOException e)
 		{

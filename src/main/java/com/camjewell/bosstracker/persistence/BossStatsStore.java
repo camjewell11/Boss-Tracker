@@ -2,11 +2,8 @@ package com.camjewell.bosstracker.persistence;
 
 import com.camjewell.bosstracker.boss.Boss;
 import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
 import java.io.IOException;
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +28,7 @@ public class BossStatsStore
 
 	public BossStats load(long accountHash, Boss boss)
 	{
-		BossStats stats = read(statsFile(accountHash, boss), boss);
+		BossStats stats = read(statsFile(accountHash, boss));
 		for (String legacyName : boss.getLegacyNames())
 		{
 			File legacy = statsFile(accountHash, legacyName);
@@ -39,7 +36,7 @@ public class BossStatsStore
 			{
 				continue;
 			}
-			stats.mergeFrom(read(legacy, boss));
+			stats.mergeFrom(read(legacy));
 			save(accountHash, boss, stats);
 			if (!legacy.renameTo(new File(legacy.getPath() + ".merged")))
 			{
@@ -50,34 +47,17 @@ public class BossStatsStore
 		return stats;
 	}
 
-	private BossStats read(File file, Boss boss)
+	private BossStats read(File file)
 	{
-		if (!file.exists())
-		{
-			return new BossStats();
-		}
-
-		try
-		{
-			String json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
-			BossStats stats = gson.fromJson(json, BossStats.class);
-			return stats != null ? stats : new BossStats();
-		}
-		catch (IOException | JsonSyntaxException e)
-		{
-			log.warn("Failed to load boss stats for {}", boss.getBossName(), e);
-			return new BossStats();
-		}
+		BossStats stats = JsonFiles.read(gson, file, BossStats.class);
+		return stats != null ? stats : new BossStats();
 	}
 
 	public void save(long accountHash, Boss boss, BossStats stats)
 	{
-		File file = statsFile(accountHash, boss);
-		file.getParentFile().mkdirs();
-
 		try
 		{
-			Files.write(file.toPath(), gson.toJson(stats).getBytes(StandardCharsets.UTF_8));
+			JsonFiles.write(statsFile(accountHash, boss), gson.toJson(stats));
 		}
 		catch (IOException e)
 		{
