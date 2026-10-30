@@ -128,6 +128,9 @@ public class BossTrackerPanel extends PluginPanel
 	private static final String ALL_RAIDS = "All raids";
 	private static final String SORT_NEWEST = "Newest first";
 	private static final String SORT_VALUE = "Highest value";
+	private static final String UNIQUES_ALL = "All sessions";
+	private static final String UNIQUES_MINE = "My uniques";
+	private static final String UNIQUES_ANY = "Any uniques";
 	private static final ImageIcon SEARCH_ICON = new ImageIcon(ImageUtil.loadImageResource(IconTextField.class, "search.png"));
 
 	private final SessionManager sessionManager;
@@ -230,7 +233,7 @@ public class BossTrackerPanel extends PluginPanel
 	private final JButton historyCollapseAllButton = new JButton("Collapse All");
 	private final JComboBox<String> historyBossFilter = new JComboBox<>(new String[]{ALL_BOSSES});
 	private final JComboBox<String> historySortOrder = new JComboBox<>(new String[]{SORT_NEWEST, SORT_VALUE});
-	private final JToggleButton historyUniquesOnlyButton = createDarkToggleButton("Uniques Only");
+	private final JComboBox<String> historyUniquesFilter = new JComboBox<>(new String[]{UNIQUES_ALL, UNIQUES_MINE, UNIQUES_ANY});
 	private final JPanel historyLegendPanel = new JPanel(new GridLayout(1, 0, 2, 0));
 	/** Set while the boss filter's choices are rebuilt, so that doesn't count as the user picking one. */
 	private boolean updatingHistoryFilters;
@@ -2655,7 +2658,7 @@ public class BossTrackerPanel extends PluginPanel
 		// so the version check alone would leave the rows showing stale colours or sessions.
 		int highlightSignature = historyHighlightSignature();
 		int filterSignature = Objects.hash(historyBossFilter.getSelectedItem(), historySortOrder.getSelectedItem(),
-			historyUniquesOnlyButton.isSelected());
+			historyUniquesFilter.getSelectedItem());
 		boolean entriesChanged = historyManager.getVersion() != lastRenderedHistoryVersion;
 		if (!entriesChanged && highlightSignature == lastRenderedHistoryHighlight
 			&& filterSignature == lastRenderedHistoryFilter)
@@ -2783,7 +2786,7 @@ public class BossTrackerPanel extends PluginPanel
 	private List<SessionHistoryEntry> filterHistory(List<SessionHistoryEntry> entries)
 	{
 		Object boss = historyBossFilter.getSelectedItem();
-		boolean uniquesOnly = historyUniquesOnlyButton.isSelected();
+		Object uniques = historyUniquesFilter.getSelectedItem();
 		List<SessionHistoryEntry> shown = new ArrayList<>();
 		for (SessionHistoryEntry entry : entries)
 		{
@@ -2792,7 +2795,8 @@ public class BossTrackerPanel extends PluginPanel
 			{
 				continue;
 			}
-			if (uniquesOnly && !hasNotableDrop(entry))
+			if (UNIQUES_MINE.equals(uniques) && !hasNotableDrop(entry)
+				|| UNIQUES_ANY.equals(uniques) && !hasNotableDrop(entry) && entry.getTeammateUniques().isEmpty())
 			{
 				continue;
 			}
@@ -2838,7 +2842,7 @@ public class BossTrackerPanel extends PluginPanel
 		historyBossFilter.setSelectedItem(stillOffered ? selected : ALL_BOSSES);
 		updatingHistoryFilters = false;
 		lastRenderedHistoryFilter = Objects.hash(historyBossFilter.getSelectedItem(), historySortOrder.getSelectedItem(),
-			historyUniquesOnlyButton.isSelected());
+			historyUniquesFilter.getSelectedItem());
 	}
 
 	/** "October 2026  12 sessions · 48.2m" above a month's or year's sessions. */
@@ -2946,12 +2950,14 @@ public class BossTrackerPanel extends PluginPanel
 		header.setOpaque(false);
 		header.setBorder(new EmptyBorder(0, 0, 4, 0));
 
-		for (JComboBox<String> combo : Arrays.asList(historyBossFilter, historySortOrder))
+		for (JComboBox<String> combo : Arrays.asList(historyBossFilter, historySortOrder, historyUniquesFilter))
 		{
 			styleComboBox(combo);
 		}
 		historyBossFilter.setToolTipText("Show one boss's sessions, or every raid's");
 		historySortOrder.setToolTipText("Newest first groups sessions by day");
+		historyUniquesFilter.setToolTipText("<html>My uniques: sessions where you got a pet, a raid cosmetic or similar rare drop, or a drop worth 1m+ each"
+			+ "<br>Any uniques: those, and sessions where a teammate's unique was split with you</html>");
 		historyBossFilter.addActionListener(e ->
 		{
 			if (!updatingHistoryFilters)
@@ -2960,16 +2966,12 @@ public class BossTrackerPanel extends PluginPanel
 			}
 		});
 		historySortOrder.addActionListener(e -> refreshHistoryPanel());
+		historyUniquesFilter.addActionListener(e -> refreshHistoryPanel());
 
 		JPanel filterRow = new JPanel(new GridLayout(1, 2, 4, 0));
 		filterRow.setOpaque(false);
 		filterRow.add(historyBossFilter);
 		filterRow.add(historySortOrder);
-
-		styleButton(historyUniquesOnlyButton);
-		historyUniquesOnlyButton.setFont(FontManager.getRunescapeSmallFont());
-		historyUniquesOnlyButton.setToolTipText("Only sessions with a pet, a raid cosmetic or similar rare drop, or a drop worth 1m+ each");
-		historyUniquesOnlyButton.addActionListener(e -> refreshHistoryPanel());
 
 		styleButton(historyCollapseAllButton);
 		historyCollapseAllButton.setFont(FontManager.getRunescapeSmallFont());
@@ -2983,7 +2985,7 @@ public class BossTrackerPanel extends PluginPanel
 
 		JPanel buttonRow = new JPanel(new GridLayout(1, 2, 4, 0));
 		buttonRow.setOpaque(false);
-		buttonRow.add(historyUniquesOnlyButton);
+		buttonRow.add(historyUniquesFilter);
 		buttonRow.add(historyCollapseAllButton);
 
 		historyLegendPanel.setOpaque(false);
