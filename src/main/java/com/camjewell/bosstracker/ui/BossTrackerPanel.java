@@ -2563,12 +2563,19 @@ public class BossTrackerPanel extends PluginPanel
 	 */
 	private Color historyValueColor(double totalGp)
 	{
+		int tier = historyTierMet(totalGp);
+		return tier == 0 ? null : historyTierColor(tier);
+	}
+
+	/** The highest-value tier {@code totalGp} reaches, or 0 for none or when highlighting is off. */
+	private int historyTierMet(double totalGp)
+	{
 		if (!config.highlightHistoryByValue())
 		{
-			return null;
+			return 0;
 		}
 
-		Color color = null;
+		int met = 0;
 		long highestMet = Long.MIN_VALUE;
 		for (int tier = 1; tier <= HISTORY_VALUE_TIERS; tier++)
 		{
@@ -2576,10 +2583,16 @@ public class BossTrackerPanel extends PluginPanel
 			if (threshold != GpValue.INVALID && totalGp >= threshold && threshold > highestMet)
 			{
 				highestMet = threshold;
-				color = historyTierColor(tier);
+				met = tier;
 			}
 		}
-		return color;
+		return met;
+	}
+
+	/** A tier's GP threshold, or the lowest possible for tier 0, which every tier is above. */
+	private long historyTierThreshold(int tier)
+	{
+		return tier == 0 ? Long.MIN_VALUE : GpValue.parse(historyTierValue(tier));
 	}
 
 	private String historyTierValue(int tier)
@@ -2905,7 +2918,8 @@ public class BossTrackerPanel extends PluginPanel
 			historyLegendPanel.add(legendLabel(value + "+", historyTierColor(tier)));
 		}
 		historyLegendPanel.add(legendLabel("Pet", PET_GOLD));
-		historyLegendPanel.setToolTipText("Row colours: the highest tier a session's loot reaches. A fade into gold means a pet dropped.");
+		historyLegendPanel.setToolTipText("<html>Row colours: the highest tier a session's loot reaches. A fade into gold means a pet dropped."
+			+ "<br>A fade into a tier's colour means your share of a teammate's unique reached it.</html>");
 		historyLegendPanel.setVisible(true);
 		historyLegendPanel.revalidate();
 	}
@@ -3028,11 +3042,19 @@ public class BossTrackerPanel extends PluginPanel
 		expandButton.setHorizontalAlignment(SwingConstants.LEFT);
 		expandButton.setSelected(expandedHistoryEntryIds.contains(entry.getEndedAtEpochMilli()));
 
-		Color valueColor = historyValueColor(totalGp);
+		int valueTier = historyTierMet(totalGp);
+		Color valueColor = valueTier == 0 ? null : historyTierColor(valueTier);
 		styleButton(expandButton, valueColor != null ? valueColor : Color.WHITE);
+		// A teammate's unique isn't in the loot total, so the player's share of it fades in
+		// separately, when it reaches a higher tier than the session's own loot.
+		int splitTier = historyTierMet(UniqueSplits.teammateShares(entry.getTeammateUniques()));
 		if (entry.isPetObtained())
 		{
 			expandButton.setText(gradientHtml(expandButton.getText(), valueColor != null ? valueColor : Color.WHITE, PET_GOLD));
+		}
+		else if (historyTierThreshold(splitTier) > historyTierThreshold(valueTier))
+		{
+			expandButton.setText(gradientHtml(expandButton.getText(), valueColor != null ? valueColor : Color.WHITE, historyTierColor(splitTier)));
 		}
 		String title = entry.getBossName() + " - " + killsText;
 		String notableDrops = buildNotableDropsTooltip(entry);
