@@ -1266,9 +1266,10 @@ public class BossTrackerPanel extends PluginPanel
 		container.setOpaque(false);
 		container.setBorder(new MatteBorder(0, 0, 1, 0, new Color(37, 125, 141)));
 
-		JPanel buttonWrapper = new JPanel(new GridLayout(1, 2, 5, 5));
+		// One per row: side by side, "End Session" didn't fit its half of the panel
+		JPanel buttonWrapper = new JPanel(new GridLayout(2, 1, 0, 6));
 		buttonWrapper.setOpaque(false);
-		buttonWrapper.setBorder(new EmptyBorder(3, 10, 8, 10));
+		buttonWrapper.setBorder(new EmptyBorder(6, 10, 8, 10));
 
 		styleButton(sessionNotesButton);
 		sessionNotesButton.addActionListener(e ->
