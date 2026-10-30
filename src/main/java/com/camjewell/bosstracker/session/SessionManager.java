@@ -1034,6 +1034,8 @@ public class SessionManager
 		entry.setItemPricesAtDrop(new LinkedHashMap<>(lootTracker.getSessionDropPrices()));
 		entry.setUniqueKillCounts(lootTracker.getSessionUniqueKillCounts());
 		entry.setNotes(endedSession.getNotes());
+		entry.setUniqueSplits(new LinkedHashMap<>(endedSession.getUniqueSplits()));
+		entry.setTeammateUniques(new ArrayList<>(endedSession.getTeammateUniques()));
 		return entry;
 	}
 }

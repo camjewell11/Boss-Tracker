@@ -11,8 +11,10 @@ import com.camjewell.bosstracker.loot.LootBossMatcher;
 import com.camjewell.bosstracker.loot.NotableDrops;
 import com.camjewell.bosstracker.loot.PerfectKillLoot;
 import com.camjewell.bosstracker.loot.LootTracker;
+import com.camjewell.bosstracker.loot.UniqueSplits;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
+import com.camjewell.bosstracker.persistence.TeammateUnique;
 import com.camjewell.bosstracker.persistence.Trip;
 import com.camjewell.bosstracker.persistence.TripEndReason;
 import com.camjewell.bosstracker.session.BossGoal;
@@ -29,6 +31,7 @@ import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -41,6 +44,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -51,6 +55,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.IntToLongFunction;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.swing.AbstractButton;
@@ -68,6 +73,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JRadioButton;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
@@ -96,6 +102,7 @@ import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.client.util.ColorUtil;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.SwingUtil;
+import net.runelite.http.api.item.ItemPrice;
 
 /**
  * The side panel: a Session tab (title header, live session stats, pause/resume, the
@@ -168,6 +175,15 @@ public class BossTrackerPanel extends PluginPanel
 	private final JLabel lootGpPerKillLabel = new JLabel(htmlLabelStacked("GP/Kill", "N/A"));
 	private final JLabel lootGpPerHourLabel = new JLabel(htmlLabelStacked("GP/Hr", "N/A"));
 	private final JLabel lootTotalGpLabel = new JLabel(htmlLabelStacked("Total GP", "N/A", "right"));
+	/** Raids only: the same three values once uniques are split with the group. */
+	private final JPanel lootSplitRow = new JPanel(new GridLayout(1, 3));
+	private final JLabel lootSplitGpPerHourLabel = new JLabel();
+	private final JLabel lootSplitGpPerKillLabel = new JLabel();
+	private final JLabel lootAfterSplitsLabel = new JLabel();
+	/** Raids only: the running session's teammate uniques, rebuilt when that list changes. */
+	private final JPanel liveTeammateHolder = new JPanel(new BorderLayout());
+	private BossSession lastRenderedTeammateSession;
+	private List<TeammateUnique> lastRenderedTeammateUniques;
 	private final JPanel lootGridPanel = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
 	private final ExtraLootSection minionSection = new ExtraLootSection();
 	private final ExtraLootSection perfectBonusSection = new ExtraLootSection();
@@ -825,8 +841,26 @@ public class BossTrackerPanel extends PluginPanel
 		statsRow.add(lootGpPerKillLabel);
 		statsRow.add(lootTotalGpLabel);
 
+		lootSplitRow.setOpaque(false);
+		lootSplitRow.setBorder(new EmptyBorder(0, 5, 3, 5));
+		lootSplitRow.setToolTipText("After your uniques' splits (less GE tax on split items) and your shares of teammates' uniques");
+		for (JLabel label : new JLabel[]{lootSplitGpPerHourLabel, lootSplitGpPerKillLabel, lootAfterSplitsLabel})
+		{
+			label.setFont(FontManager.getRunescapeSmallFont());
+			lootSplitRow.add(label);
+		}
+		lootSplitGpPerHourLabel.setHorizontalAlignment(SwingConstants.LEFT);
+		lootSplitGpPerKillLabel.setHorizontalAlignment(SwingConstants.CENTER);
+		lootAfterSplitsLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+		lootSplitRow.setVisible(false);
+
+		JPanel statsRows = new JPanel(new BorderLayout());
+		statsRows.setOpaque(false);
+		statsRows.add(statsRow, BorderLayout.NORTH);
+		statsRows.add(lootSplitRow, BorderLayout.SOUTH);
+
 		headerPanel.add(toggleRow, BorderLayout.NORTH);
-		headerPanel.add(statsRow, BorderLayout.SOUTH);
+		headerPanel.add(statsRows, BorderLayout.SOUTH);
 
 		lootGridPanel.setOpaque(false);
 		lootGridPanel.setBorder(new EmptyBorder(10, 2, 8, 2));
@@ -836,7 +870,11 @@ public class BossTrackerPanel extends PluginPanel
 		JPanel extraSections = new JPanel(new BorderLayout());
 		extraSections.setOpaque(false);
 		extraSections.add(minionSection.panel, BorderLayout.NORTH);
-		extraSections.add(perfectBonusSection.panel, BorderLayout.SOUTH);
+		extraSections.add(perfectBonusSection.panel, BorderLayout.CENTER);
+		liveTeammateHolder.setOpaque(false);
+		liveTeammateHolder.setBorder(new EmptyBorder(0, 5, 8, 2));
+		liveTeammateHolder.setVisible(false);
+		extraSections.add(liveTeammateHolder, BorderLayout.SOUTH);
 
 		wrapper.add(headerPanel, BorderLayout.NORTH);
 		wrapper.add(lootGridPanel, BorderLayout.CENTER);
@@ -851,6 +889,8 @@ public class BossTrackerPanel extends PluginPanel
 			lootGpPerHourLabel.setText(htmlLabelStacked("GP/Hr", "N/A", "left"));
 			lootGpPerKillLabel.setText(htmlLabelStacked("GP/Kill", "N/A"));
 			lootTotalGpLabel.setText(htmlLabelStacked("Total GP", "N/A", "right"));
+			lootSplitRow.setVisible(false);
+			refreshLiveTeammateSection(null);
 			if (lastRenderedLootBoss != null)
 			{
 				lootGridPanel.removeAll();
@@ -885,6 +925,21 @@ public class BossTrackerPanel extends PluginPanel
 		lootGpPerKillLabel.setText(htmlLabelStacked("GP/Kill", kills > 0 ? GpFormat.compact(totalGp / kills) : "N/A"));
 		lootTotalGpLabel.setText(htmlLabelStacked("Total GP", GpFormat.compact(totalGp), "right"));
 
+		boolean raid = display.getBoss().isRaid();
+		boolean showSplits = raid && hasUniques(display.getBoss(), lootMap, priceCache::getPrice,
+			allTime ? lifetimeTeammateUniques(display.getBoss()) : display.getTeammateUniques());
+		lootSplitRow.setVisible(showSplits);
+		if (showSplits)
+		{
+			double afterSplits = allTime
+				? totalGp + lifetimeSplitAdjustment(display.getBoss())
+				: UniqueSplits.afterSplits(totalGp, lootMap, display.getUniqueSplits(), display.getTeammateUniques(), priceCache::getPrice);
+			lootSplitGpPerHourLabel.setText(htmlLabelStacked("Split GP/Hr", hours > 0 ? GpFormat.abbreviated(afterSplits / hours) : "N/A", "left"));
+			lootSplitGpPerKillLabel.setText(htmlLabelStacked("Split GP/Kill", kills > 0 ? GpFormat.compact(afterSplits / kills) : "N/A"));
+			lootAfterSplitsLabel.setText(htmlLabelStacked("After Splits", GpFormat.compact(afterSplits), "right"));
+		}
+		refreshLiveTeammateSection(display);
+
 		boolean showIgnored = showIgnoredLootButton.isSelected();
 		int version = lootTracker.getVersion();
 		if (version == lastRenderedLootVersion && allTime == lastRenderedLootAllTime
@@ -897,7 +952,9 @@ public class BossTrackerPanel extends PluginPanel
 		lastRenderedLootShowIgnored = showIgnored;
 		lastRenderedLootBoss = display.getBoss();
 
-		populateLootGrid(lootGridPanel, lootMap, showIgnored);
+		// Splits are set on the running session's own drops, not the all-time totals.
+		BossSession splitSession = !allTime && raid && display == sessionManager.getSession() ? display : null;
+		populateLootGrid(lootGridPanel, lootMap, showIgnored, splitSession);
 
 		Boss boss = display.getBoss();
 		refreshExtraSection(minionSection, LootBossMatcher.hasMinions(boss), "Minion Loot", "Minion Kills",
@@ -973,7 +1030,7 @@ public class BossTrackerPanel extends PluginPanel
 		section.killsLabel.setText(htmlLabelStacked(killsKey, String.valueOf(kills), "left"));
 		section.totalGpLabel.setText(htmlLabelStacked("Total GP", GpFormat.compact(totalGp), "right"));
 
-		populateLootGrid(section.grid, loot, showIgnored);
+		populateLootGrid(section.grid, loot, showIgnored, null);
 		section.grid.setVisible(!lootCollapseButton.isSelected());
 		section.panel.setVisible(true);
 	}
@@ -981,8 +1038,11 @@ public class BossTrackerPanel extends PluginPanel
 	/**
 	 * Fills a loot grid, highest value first. Ignored items are hidden unless {@code showIgnored},
 	 * then shown faded; right-click toggles an item's ignored state for the tracked boss.
+	 *
+	 * @param splitSession the running raid session whose uniques can be given a split by
+	 * right-click, or null
 	 */
-	private void populateLootGrid(JPanel grid, Map<Integer, Integer> lootMap, boolean showIgnored)
+	private void populateLootGrid(JPanel grid, Map<Integer, Integer> lootMap, boolean showIgnored, BossSession splitSession)
 	{
 		grid.removeAll();
 
@@ -1026,6 +1086,15 @@ public class BossTrackerPanel extends PluginPanel
 				refresh();
 			});
 			popupMenu.add(toggleIgnore);
+			long unitPrice = priceCache.getPrice(itemId);
+			if (splitSession != null && NotableDrops.isNotable(splitSession.getBoss(), itemId, unitPrice))
+			{
+				addSplitControls(itemLabel, popupMenu, itemId, quantity, unitPrice, splitSession.getUniqueSplits(), splits ->
+				{
+					splitSession.setUniqueSplits(splits);
+					refreshAfterLiveSplitChange();
+				});
+			}
 			itemLabel.setComponentPopupMenu(popupMenu);
 
 			JPanel slot = new JPanel(new BorderLayout());
@@ -1275,6 +1344,477 @@ public class BossTrackerPanel extends PluginPanel
 	private static String notesHtml(String notes)
 	{
 		return notes.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>");
+	}
+
+	/** The live grid and search only rebuild on new loot or saved sessions, so force both. */
+	private void refreshAfterLiveSplitChange()
+	{
+		lastRenderedLootVersion = -1;
+		lastRenderedLookupVersion = -1;
+		refresh();
+	}
+
+	/** Shown while a raid session runs, so a teammate's unique can be added straight away. */
+	private void refreshLiveTeammateSection(BossSession display)
+	{
+		BossSession live = display != null && display == sessionManager.getSession() && display.getBoss().isRaid() ? display : null;
+		List<TeammateUnique> uniques = live != null ? live.getTeammateUniques() : null;
+		if (live == lastRenderedTeammateSession && uniques == lastRenderedTeammateUniques)
+		{
+			return;
+		}
+		lastRenderedTeammateSession = live;
+		lastRenderedTeammateUniques = uniques;
+
+		liveTeammateHolder.removeAll();
+		if (live != null)
+		{
+			liveTeammateHolder.add(buildTeammateUniquesSection(live.getBoss(), uniques, false, updated ->
+			{
+				live.setTeammateUniques(updated);
+				refreshAfterLiveSplitChange();
+			}), BorderLayout.CENTER);
+		}
+		liveTeammateHolder.setVisible(live != null);
+		liveTeammateHolder.revalidate();
+		liveTeammateHolder.repaint();
+	}
+
+	/**
+	 * How splits change a raid's all-time loot value: less what went to the group or to tax,
+	 * plus the player's shares of teammates' uniques. Own splits use today's prices, like the
+	 * all-time total they come off. Counts the running session, whose loot is already in that
+	 * total.
+	 */
+	private double lifetimeSplitAdjustment(Boss boss)
+	{
+		double adjustment = 0;
+		for (double givenAway : lifetimeGivenAwayByItem(boss).values())
+		{
+			adjustment -= givenAway;
+		}
+		for (SessionHistoryEntry entry : historyForBoss(boss))
+		{
+			adjustment += UniqueSplits.teammateShares(entry.getTeammateUniques());
+		}
+		BossSession live = sessionManager.getSession();
+		if (live != null && live.getBoss() == boss)
+		{
+			adjustment += UniqueSplits.teammateShares(live.getTeammateUniques());
+		}
+		return adjustment;
+	}
+
+	/** Every unique teammates split with the player at a raid, the running session's included. */
+	private List<TeammateUnique> lifetimeTeammateUniques(Boss boss)
+	{
+		List<TeammateUnique> uniques = new ArrayList<>();
+		for (SessionHistoryEntry entry : historyForBoss(boss))
+		{
+			uniques.addAll(entry.getTeammateUniques());
+		}
+		BossSession live = sessionManager.getSession();
+		if (live != null && live.getBoss() == boss)
+		{
+			uniques.addAll(live.getTeammateUniques());
+		}
+		return uniques;
+	}
+
+	/**
+	 * Whether a raid's split stats are worth showing: without a unique of the player's own or a
+	 * teammate's, they'd only repeat the raw totals.
+	 */
+	private static boolean hasUniques(Boss boss, Map<Integer, Integer> loot, IntToLongFunction price,
+		List<TeammateUnique> teammateUniques)
+	{
+		if (!teammateUniques.isEmpty())
+		{
+			return true;
+		}
+		for (int itemId : loot.keySet())
+		{
+			if (NotableDrops.isNotable(boss, itemId, price.applyAsLong(itemId)))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * What each of a raid's uniques lost to splits across every session, at today's prices, with
+	 * an entry for every unique ever given a split.
+	 */
+	private Map<Integer, Double> lifetimeGivenAwayByItem(Boss boss)
+	{
+		Map<Integer, Double> givenAway = new LinkedHashMap<>();
+		for (SessionHistoryEntry entry : historyForBoss(boss))
+		{
+			UniqueSplits.givenAwayByItem(entry.getLootItemQuantities(), entry.getUniqueSplits(), priceCache::getPrice)
+				.forEach((itemId, value) -> givenAway.merge(itemId, value, Double::sum));
+		}
+		BossSession live = sessionManager.getSession();
+		if (live != null && live.getBoss() == boss)
+		{
+			UniqueSplits.givenAwayByItem(lootTracker.getSessionLoot(), live.getUniqueSplits(), priceCache::getPrice)
+				.forEach((itemId, value) -> givenAway.merge(itemId, value, Double::sum));
+		}
+		return givenAway;
+	}
+
+	/** Adds a raid unique's split to its tooltip, and a right-click option to set it. */
+	private void addSplitControls(JLabel itemLabel, JPopupMenu menu, int itemId, int quantity, long unitPrice,
+		Map<Integer, Integer> splits, Consumer<Map<Integer, Integer>> save)
+	{
+		Integer split = splits.get(itemId);
+		if (split != null)
+		{
+			itemLabel.setToolTipText(itemLabel.getToolTipText().replace("</html>",
+				"<br>" + splitDescription(split, UniqueSplits.share(unitPrice, quantity, split)) + "</html>"));
+		}
+
+		JMenuItem setSplit = new JMenuItem(split == null ? "Set Split..." : "Change Split...");
+		setSplit.addActionListener(e ->
+		{
+			Integer chosen = askSplit(priceCache.getName(itemId), split);
+			if (chosen == null)
+			{
+				return;
+			}
+			Map<Integer, Integer> updated = new LinkedHashMap<>(splits);
+			if (chosen == 0)
+			{
+				updated.remove(itemId);
+			}
+			else
+			{
+				updated.put(itemId, chosen);
+			}
+			save.accept(Collections.unmodifiableMap(updated));
+		});
+		menu.add(setSplit);
+	}
+
+	/** The tooltip line giving what the player made from a split unique. */
+	private static String splitDescription(int splitSize, double share)
+	{
+		return "Split GP: " + GpFormat.exact(share) + (splitSize <= UniqueSplits.FREE_FOR_ALL ? " (free for all)"
+			: " (" + splitSize + "-way split, after tax)");
+	}
+
+	/**
+	 * Asks how one of the player's raid uniques was shared. Returns the players it was split
+	 * between, {@link UniqueSplits#FREE_FOR_ALL}, 0 to clear it, or null if cancelled.
+	 */
+	private Integer askSplit(String itemName, Integer current)
+	{
+		JRadioButton freeForAll = new JRadioButton("Free for all (kept it all)");
+		JRadioButton split = new JRadioButton("Split between");
+		JRadioButton notSet = new JRadioButton("Not set");
+		ButtonGroup group = new ButtonGroup();
+		group.add(freeForAll);
+		group.add(split);
+		group.add(notSet);
+
+		SpinnerNumberModel players = new SpinnerNumberModel(current != null && current > 1 ? current : 2, 2, 100, 1);
+		JSpinner playersSpinner = new JSpinner(players);
+		playersSpinner.addChangeListener(e -> split.setSelected(true));
+
+		JPanel splitRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+		splitRow.add(split);
+		splitRow.add(playersSpinner);
+		splitRow.add(new JLabel(" players"));
+
+		if (current == null)
+		{
+			notSet.setSelected(true);
+		}
+		else if (current <= UniqueSplits.FREE_FOR_ALL)
+		{
+			freeForAll.setSelected(true);
+		}
+		else
+		{
+			split.setSelected(true);
+		}
+
+		JPanel panel = new JPanel(new GridLayout(0, 1, 0, 4));
+		panel.add(new JLabel(itemName));
+		panel.add(freeForAll);
+		panel.add(splitRow);
+		panel.add(new JLabel("Count yourself, and leave out anyone who went free for all."));
+		panel.add(notSet);
+
+		int option = JOptionPane.showConfirmDialog(this, panel, "Unique Split", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+		if (option != JOptionPane.OK_OPTION)
+		{
+			return null;
+		}
+		if (freeForAll.isSelected())
+		{
+			return UniqueSplits.FREE_FOR_ALL;
+		}
+		return split.isSelected() ? players.getNumber().intValue() : 0;
+	}
+
+	/**
+	 * Asks which unique a teammate received and how many players split it. Returns null if
+	 * cancelled. Only tradeable items can be found, as a split shares out the sale.
+	 *
+	 * @param askValue whether to ask what it sold for, for a past session where today's price may
+	 * be well off; left blank, or for the running session, today's price is used
+	 */
+	private TeammateUnique askTeammateUnique(Boss boss, boolean askValue)
+	{
+		JTextField nameField = new JTextField(18);
+		SpinnerNumberModel players = new SpinnerNumberModel(2, 2, 100, 1);
+		JTextField valueField = new JTextField(18);
+
+		JPanel panel = new JPanel(new GridLayout(0, 1, 0, 4));
+		panel.add(new JLabel("Item name"));
+		panel.add(nameField);
+		panel.add(new JLabel("Split between (players, you included)"));
+		panel.add(new JSpinner(players));
+		if (askValue)
+		{
+			panel.add(new JLabel("Value when received, e.g. 405m (blank for today's price)"));
+			panel.add(valueField);
+		}
+
+		String title = "Add Teammate's Unique (" + boss.getBossName() + ")";
+		while (true)
+		{
+			SwingUtilities.invokeLater(nameField::requestFocusInWindow);
+			int option = JOptionPane.showConfirmDialog(this, panel, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+			String query = nameField.getText().trim();
+			if (option != JOptionPane.OK_OPTION || query.isEmpty())
+			{
+				return null;
+			}
+
+			String valueText = valueField.getText().trim();
+			long value = valueText.isEmpty() ? GpValue.INVALID : GpValue.parse(valueText);
+			if (!valueText.isEmpty() && value == GpValue.INVALID)
+			{
+				JOptionPane.showMessageDialog(this, "\"" + valueText + "\" isn't an amount. Type it like 405m, 1.2b or 405,000,000.",
+					title, JOptionPane.WARNING_MESSAGE);
+				continue;
+			}
+
+			List<ItemPrice> matches = itemManager.search(query);
+			ItemPrice match = matches.stream().filter(item -> item.getName().equalsIgnoreCase(query)).findFirst()
+				.orElse(matches.size() == 1 ? matches.get(0) : null);
+			if (match != null)
+			{
+				return new TeammateUnique(match.getId(), match.getName(), players.getNumber().intValue(),
+					value == GpValue.INVALID ? match.getPrice() : value);
+			}
+
+			String message = matches.isEmpty() ? "No tradeable item is called \"" + query + "\"."
+				: "Several items match \"" + query + "\": " + matches.stream().limit(5).map(ItemPrice::getName)
+					.collect(Collectors.joining(", ")) + (matches.size() > 5 ? "..." : "") + "\nType the full name.";
+			JOptionPane.showMessageDialog(this, message, title, JOptionPane.WARNING_MESSAGE);
+		}
+	}
+
+	/** Asks for a new split size for a teammate's unique, or null if cancelled. */
+	private Integer askTeammateSplit(TeammateUnique unique)
+	{
+		SpinnerNumberModel players = new SpinnerNumberModel(Math.max(2, unique.getSplitSize()), 2, 100, 1);
+		JPanel panel = new JPanel(new GridLayout(0, 1, 0, 4));
+		panel.add(new JLabel(unique.getItemName() + ": split between (players, you included)"));
+		panel.add(new JSpinner(players));
+		int option = JOptionPane.showConfirmDialog(this, panel, "Unique Split", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+		return option == JOptionPane.OK_OPTION ? players.getNumber().intValue() : null;
+	}
+
+	/** Asks what a teammate's unique was worth when received, or null if cancelled. */
+	private Long askTeammateValue(TeammateUnique unique)
+	{
+		JTextField valueField = new JTextField(GpFormat.shorthand(unique.getPrice()), 18);
+		JPanel panel = new JPanel(new GridLayout(0, 1, 0, 4));
+		panel.add(new JLabel(unique.getItemName() + ": value when received, e.g. 405m"));
+		panel.add(valueField);
+		while (true)
+		{
+			SwingUtilities.invokeLater(valueField::requestFocusInWindow);
+			int option = JOptionPane.showConfirmDialog(this, panel, "Unique Value", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+			if (option != JOptionPane.OK_OPTION)
+			{
+				return null;
+			}
+			long value = GpValue.parse(valueField.getText());
+			if (value != GpValue.INVALID)
+			{
+				return value;
+			}
+			JOptionPane.showMessageDialog(this, "\"" + valueField.getText().trim() + "\" isn't an amount. Type it like 405m, 1.2b or 405,000,000.",
+				"Unique Value", JOptionPane.WARNING_MESSAGE);
+		}
+	}
+
+	/**
+	 * Raids only: uniques teammates received and split with the player, each showing the
+	 * player's share, and the button that adds one. {@code save} gets the whole new list.
+	 *
+	 * @param askValue whether the player sets what each was worth: for a saved session, where
+	 * today's price may be well off
+	 */
+	private JPanel buildTeammateUniquesSection(Boss boss, List<TeammateUnique> uniques, boolean askValue,
+		Consumer<List<TeammateUnique>> save)
+	{
+		JPanel section = new JPanel(new BorderLayout(0, 6));
+		section.setOpaque(false);
+		section.setBorder(new CompoundBorder(new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49)), new EmptyBorder(6, 0, 0, 0)));
+
+		JLabel title = new JLabel("Teammate Uniques");
+		title.setFont(FontManager.getRunescapeSmallFont());
+		title.setForeground(Color.WHITE);
+		title.setToolTipText("Uniques a teammate received and split with you; your share counts toward After Splits");
+		section.add(title, BorderLayout.NORTH);
+
+		if (!uniques.isEmpty())
+		{
+			JPanel grid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
+			grid.setOpaque(false);
+			for (int i = 0; i < uniques.size(); i++)
+			{
+				int index = i;
+				TeammateUnique unique = uniques.get(i);
+
+				JLabel itemLabel = new JLabel();
+				itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
+				itemLabel.setToolTipText("<html>" + notesHtml(unique.getItemName()) + " (a teammate's drop)"
+					+ "<br>GP/Item: " + GpFormat.exact(unique.getPrice())
+					+ "<br>" + splitDescription(unique.getSplitSize(), UniqueSplits.share(unique.getPrice(), 1, unique.getSplitSize()))
+					+ "</html>");
+				itemManager.getImage(unique.getItemId()).addTo(itemLabel);
+
+				JPopupMenu menu = new JPopupMenu();
+				JMenuItem changeSplit = new JMenuItem("Change Split...");
+				changeSplit.addActionListener(e ->
+				{
+					Integer splitSize = askTeammateSplit(unique);
+					if (splitSize != null)
+					{
+						List<TeammateUnique> updated = new ArrayList<>(uniques);
+						updated.set(index, new TeammateUnique(unique.getItemId(), unique.getItemName(), splitSize, unique.getPrice()));
+						save.accept(Collections.unmodifiableList(updated));
+					}
+				});
+				JMenuItem remove = new JMenuItem("Remove");
+				remove.addActionListener(e ->
+				{
+					List<TeammateUnique> updated = new ArrayList<>(uniques);
+					updated.remove(index);
+					save.accept(Collections.unmodifiableList(updated));
+				});
+				menu.add(changeSplit);
+				if (askValue)
+				{
+					JMenuItem changeValue = new JMenuItem("Change Value...");
+					changeValue.addActionListener(e ->
+					{
+						Long value = askTeammateValue(unique);
+						if (value != null)
+						{
+							List<TeammateUnique> updated = new ArrayList<>(uniques);
+							updated.set(index, new TeammateUnique(unique.getItemId(), unique.getItemName(), unique.getSplitSize(), value));
+							save.accept(Collections.unmodifiableList(updated));
+						}
+					});
+					menu.add(changeValue);
+				}
+				menu.add(remove);
+				itemLabel.setComponentPopupMenu(menu);
+
+				JPanel slot = new JPanel(new BorderLayout());
+				slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+				slot.setBorder(new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49)));
+				slot.setPreferredSize(new Dimension(40, 40));
+				slot.add(itemLabel, BorderLayout.CENTER);
+				grid.add(slot);
+			}
+			section.add(grid, BorderLayout.CENTER);
+		}
+
+		JButton addButton = new JButton("Add Teammate's Unique");
+		styleButton(addButton);
+		addButton.addActionListener(e ->
+		{
+			TeammateUnique added = askTeammateUnique(boss, askValue);
+			if (added != null)
+			{
+				List<TeammateUnique> updated = new ArrayList<>(uniques);
+				updated.add(added);
+				save.accept(Collections.unmodifiableList(updated));
+			}
+		});
+		JPanel buttonWrapper = new JPanel(new GridLayout(1, 1));
+		buttonWrapper.setOpaque(false);
+		buttonWrapper.add(addButton);
+		section.add(buttonWrapper, BorderLayout.SOUTH);
+		return section;
+	}
+
+	/**
+	 * Every unique teammates split with the player at a raid, one slot per item, valued as they
+	 * were when added rather than at today's prices.
+	 */
+	private JPanel buildLookupTeammateSection(List<TeammateUnique> uniques)
+	{
+		Map<Integer, List<TeammateUnique>> byItem = new LinkedHashMap<>();
+		for (TeammateUnique unique : uniques)
+		{
+			byItem.computeIfAbsent(unique.getItemId(), itemId -> new ArrayList<>()).add(unique);
+		}
+
+		JPanel section = new JPanel(new BorderLayout(0, 4))
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		section.setOpaque(false);
+
+		JLabel title = new JLabel("Teammate Uniques");
+		title.setForeground(Color.WHITE);
+		title.setToolTipText("Uniques a teammate received and split with you; your shares count toward After Splits");
+		section.add(title, BorderLayout.NORTH);
+
+		JPanel grid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
+		grid.setOpaque(false);
+		for (List<TeammateUnique> items : byItem.values())
+		{
+			double value = 0;
+			double share = 0;
+			for (TeammateUnique unique : items)
+			{
+				value += unique.getPrice();
+				share += UniqueSplits.share(unique.getPrice(), 1, unique.getSplitSize());
+			}
+			TeammateUnique first = items.get(0);
+			int quantity = items.size();
+
+			JLabel itemLabel = new JLabel();
+			itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
+			itemLabel.setToolTipText("<html>" + notesHtml(first.getItemName()) + " x " + quantity + " (teammates' drops)"
+				+ "<br>Value: " + GpFormat.exact(value)
+				+ "<br>Split GP: " + GpFormat.exact(share) + " (your shares, after tax)</html>");
+			itemManager.getImage(first.getItemId(), quantity, quantity > 1).addTo(itemLabel);
+
+			JPanel slot = new JPanel(new BorderLayout());
+			slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+			slot.setBorder(new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49)));
+			slot.setPreferredSize(new Dimension(40, 40));
+			slot.add(itemLabel, BorderLayout.CENTER);
+			grid.add(slot);
+		}
+		section.add(grid, BorderLayout.CENTER);
+		return section;
 	}
 
 	/** A boss's session notes, newest first, each under the session's date and kills. */
@@ -1710,6 +2250,7 @@ public class BossTrackerPanel extends PluginPanel
 			detailPanel.add(buildDryStreakPanel(boss, bossHistory, liveSession));
 		}
 
+		List<TeammateUnique> teammateUniques = boss.isRaid() ? lifetimeTeammateUniques(boss) : Collections.emptyList();
 		if (!lootMap.isEmpty())
 		{
 			double totalGp = 0;
@@ -1725,7 +2266,19 @@ public class BossTrackerPanel extends PluginPanel
 			JLabel gpPerKillLabel = new JLabel(htmlLabel("GP/Kill: ",
 				kills > 0 ? GpFormat.compact(totalGp / kills) : "N/A"));
 			JLabel totalGpLabel = new JLabel(htmlLabel("Total GP: ", GpFormat.compact(totalGp)));
-			detailPanel.add(createStatsPanel(gpPerKillLabel, totalGpLabel));
+			if (boss.isRaid() && hasUniques(boss, lootMap, priceCache::getPrice, teammateUniques))
+			{
+				double afterSplits = totalGp + lifetimeSplitAdjustment(boss);
+				JLabel splitGpPerKillLabel = new JLabel(htmlLabel("Split GP/Kill: ",
+					kills > 0 ? GpFormat.compact(afterSplits / kills) : "N/A"));
+				JLabel afterSplitsLabel = new JLabel(htmlLabel("After Splits: ", GpFormat.compact(afterSplits)));
+				afterSplitsLabel.setToolTipText("After your uniques' splits (less GE tax on split items) and your shares of teammates' uniques");
+				detailPanel.add(createStatsPanel(gpPerKillLabel, totalGpLabel, splitGpPerKillLabel, afterSplitsLabel));
+			}
+			else
+			{
+				detailPanel.add(createStatsPanel(gpPerKillLabel, totalGpLabel));
+			}
 			detailPanel.add(sectionDivider());
 
 			// Highest value first, like the session and History grids.
@@ -1733,14 +2286,21 @@ public class BossTrackerPanel extends PluginPanel
 			items.sort(Comparator.comparingDouble((Map.Entry<Integer, Integer> item) ->
 				(double) priceCache.getPrice(item.getKey()) * item.getValue()).reversed());
 
+			Map<Integer, Double> givenAwayByItem = boss.isRaid() ? lifetimeGivenAwayByItem(boss) : Collections.emptyMap();
 			JPanel lootGrid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
 			lootGrid.setOpaque(false);
 			for (Map.Entry<Integer, Integer> item : items)
 			{
 				JLabel itemLabel = new JLabel();
 				itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
-				itemLabel.setToolTipText(buildLootTooltip(item.getKey(), item.getValue(),
-					(double) priceCache.getPrice(item.getKey()) * item.getValue()));
+				double value = (double) priceCache.getPrice(item.getKey()) * item.getValue();
+				String tooltip = buildLootTooltip(item.getKey(), item.getValue(), value);
+				Double givenAway = givenAwayByItem.get(item.getKey());
+				if (givenAway != null)
+				{
+					tooltip = tooltip.replace("</html>", "<br>Split GP: " + GpFormat.exact(value - givenAway) + " (after your splits)</html>");
+				}
+				itemLabel.setToolTipText(tooltip);
 				itemManager.getImage(item.getKey(), item.getValue(), item.getValue() > 1).addTo(itemLabel);
 
 				JPanel slot = new JPanel(new BorderLayout());
@@ -1751,6 +2311,12 @@ public class BossTrackerPanel extends PluginPanel
 				lootGrid.add(slot);
 			}
 			detailPanel.add(lootGrid);
+		}
+
+		if (!teammateUniques.isEmpty())
+		{
+			detailPanel.add(sectionDivider());
+			detailPanel.add(buildLookupTeammateSection(teammateUniques));
 		}
 
 		List<SessionHistoryEntry> withNotes = bossHistory.stream()
@@ -1834,7 +2400,7 @@ public class BossTrackerPanel extends PluginPanel
 		}
 
 		JLabel dryLabel = new JLabel(htmlLabel("Dry Streak: ", dryText));
-		dryLabel.setToolTipText("Kills since a pet, raid cosmetic, or drop worth 1m+ each, from saved sessions");
+		dryLabel.setToolTipText("Kills since a pet, a raid cosmetic or similar rare drop, or a drop worth 1m+ each, from saved sessions");
 		if (!streak.hasUnique())
 		{
 			return createStatsPanel(dryLabel, new JLabel(htmlLabel("Last Unique: ", "None in saved sessions")));
@@ -2388,7 +2954,7 @@ public class BossTrackerPanel extends PluginPanel
 
 		styleButton(historyUniquesOnlyButton);
 		historyUniquesOnlyButton.setFont(FontManager.getRunescapeSmallFont());
-		historyUniquesOnlyButton.setToolTipText("Only sessions with a pet, a raid cosmetic, or a drop worth 1m+ each");
+		historyUniquesOnlyButton.setToolTipText("Only sessions with a pet, a raid cosmetic or similar rare drop, or a drop worth 1m+ each");
 		historyUniquesOnlyButton.addActionListener(e -> refreshHistoryPanel());
 
 		styleButton(historyCollapseAllButton);
@@ -2575,6 +3141,7 @@ public class BossTrackerPanel extends PluginPanel
 		JLabel fastestKillStatLabel = new JLabel(htmlLabel("Fastest Kill: ", TimeFormat.minutesSeconds(entry.getFastestKillSeconds())));
 		JLabel idleTimeStatLabel = new JLabel(htmlLabel("Idle Time: ", TimeFormat.minutesSeconds(entry.getIdleSeconds())));
 		Boss entryBoss = Boss.byName(entry.getBossName());
+		boolean raid = entryBoss != null && entryBoss.isRaid();
 		if (entryBoss != null && entryBoss.tracksTeamDeaths())
 		{
 			JLabel teamDeathsStatLabel = new JLabel(htmlLabel("Team Deaths: ", formatTeamDeaths(entry.getTeamDeaths(), entry.getOwnDeaths())));
@@ -2616,6 +3183,24 @@ public class BossTrackerPanel extends PluginPanel
 			lootStatsRow.add(gpPerKillLabel);
 			lootStatsRow.add(totalGpLabel);
 			lootSection.add(lootStatsRow);
+			if (raid && hasUniques(entryBoss, entry.getLootItemQuantities(), itemId -> historyPrice(entry, itemId), entry.getTeammateUniques()))
+			{
+				double afterSplits = UniqueSplits.afterSplits(totalGp, entry.getLootItemQuantities(), entry.getUniqueSplits(),
+					entry.getTeammateUniques(), itemId -> historyPrice(entry, itemId));
+				JPanel splitStatsRow = new JPanel(new GridLayout(1, 2));
+				splitStatsRow.setOpaque(false);
+				splitStatsRow.setBorder(new EmptyBorder(4, 0, 0, 0));
+				splitStatsRow.setToolTipText("After your uniques' splits (less GE tax on split items) and your shares of teammates' uniques");
+				JLabel splitGpPerKillLabel = new JLabel(htmlLabelStacked("Split GP/Kill", kills > 0 ? GpFormat.exact(afterSplits / kills) : "N/A", "left"));
+				JLabel afterSplitsLabel = new JLabel(htmlLabelStacked("After Splits", GpFormat.exact(afterSplits), "right"));
+				splitGpPerKillLabel.setFont(FontManager.getRunescapeSmallFont());
+				afterSplitsLabel.setFont(FontManager.getRunescapeSmallFont());
+				splitGpPerKillLabel.setHorizontalAlignment(SwingConstants.LEFT);
+				afterSplitsLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+				splitStatsRow.add(splitGpPerKillLabel);
+				splitStatsRow.add(afterSplitsLabel);
+				lootSection.add(splitStatsRow);
+			}
 			lootSection.add(Box.createRigidArea(new Dimension(0, 10)));
 
 			JPanel lootGrid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
@@ -2625,8 +3210,16 @@ public class BossTrackerPanel extends PluginPanel
 				int quantity = entry.getLootItemQuantities().get(itemId);
 				JLabel itemLabel = new JLabel();
 				itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
-				itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, historyPrice(entry, itemId), valueByItem.get(itemId)));
+				long unitPrice = historyPrice(entry, itemId);
+				itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, unitPrice, valueByItem.get(itemId)));
 				itemManager.getImage(itemId, quantity, quantity > 1).addTo(itemLabel);
+				if (raid && NotableDrops.isNotable(entryBoss, itemId, unitPrice))
+				{
+					JPopupMenu menu = new JPopupMenu();
+					addSplitControls(itemLabel, menu, itemId, quantity, unitPrice, entry.getUniqueSplits(), splits ->
+						saveHistoryEdit(entry, saved -> saved.setUniqueSplits(splits)));
+					itemLabel.setComponentPopupMenu(menu);
+				}
 
 				JPanel slot = new JPanel(new BorderLayout());
 				slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
@@ -2650,6 +3243,12 @@ public class BossTrackerPanel extends PluginPanel
 			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
 			detailPanel.add(buildHistoryExtraSection(entry, entry.getPerfectBonusItemQuantities(),
 				"Perfect Kills", entry.getPerfectKills(), "Bonus GP"));
+		}
+		if (raid)
+		{
+			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+			detailPanel.add(buildTeammateUniquesSection(entryBoss, entry.getTeammateUniques(), true, uniques ->
+				saveHistoryEdit(entry, saved -> saved.setTeammateUniques(uniques))));
 		}
 
 		detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));

@@ -1,10 +1,14 @@
 package com.camjewell.bosstracker.session;
 
 import com.camjewell.bosstracker.boss.Boss;
+import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
+import com.camjewell.bosstracker.persistence.TeammateUnique;
 import com.camjewell.bosstracker.persistence.Trip;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -61,6 +65,13 @@ public class BossSession
 
 	/** The player's notes, saved with the session. Written from the Swing thread. */
 	private volatile String notes = "";
+
+	/**
+	 * Raids only, as saved in {@link SessionHistoryEntry}. Written from the Swing thread, and
+	 * always replaced whole so the session end never copies one half-changed.
+	 */
+	private volatile Map<Integer, Integer> uniqueSplits = Collections.emptyMap();
+	private volatile List<TeammateUnique> teammateUniques = Collections.emptyList();
 
 	/** Oldest first; the last one is still open unless a death, bank or the session ended it. */
 	private final List<Trip> trips = new ArrayList<>();

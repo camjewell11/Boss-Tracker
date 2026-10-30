@@ -69,4 +69,13 @@ public class SessionHistoryEntry
 
 	/** The player's own notes, written during the session or edited later from History. */
 	private String notes = "";
+
+	/**
+	 * Raids only: how the player's uniques were shared, by item ID, as the number of players
+	 * each was split between (1 for free for all). Items the player left unset aren't here.
+	 */
+	private Map<Integer, Integer> uniqueSplits = new LinkedHashMap<>();
+
+	/** Raids only: uniques teammates received and split with the player. */
+	private List<TeammateUnique> teammateUniques = new ArrayList<>();
 }
