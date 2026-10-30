@@ -48,6 +48,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.swing.AbstractButton;
 import javax.swing.Box;
@@ -1613,6 +1614,7 @@ public class BossTrackerPanel extends PluginPanel
 				kills > 0 ? GpFormat.compact(totalGp / kills) : "N/A"));
 			JLabel totalGpLabel = new JLabel(htmlLabel("Total GP: ", GpFormat.compact(totalGp)));
 			detailPanel.add(createStatsPanel(gpPerKillLabel, totalGpLabel));
+			detailPanel.add(sectionDivider());
 
 			// Highest value first, like the session and History grids.
 			List<Map.Entry<Integer, Integer>> items = new ArrayList<>(lootMap.entrySet());
@@ -1648,6 +1650,24 @@ public class BossTrackerPanel extends PluginPanel
 		resultPanel.add(detailPanel, BorderLayout.CENTER);
 		resultPanel.add(deleteButtonPanel, BorderLayout.SOUTH);
 		return resultPanel;
+	}
+
+	/** A thin full-width line between two sections of a panel. */
+	private static JPanel sectionDivider()
+	{
+		JPanel divider = new JPanel()
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		// Left at the default centre alignment, like the panels around it: BoxLayout
+		// squeezes a left-aligned child into half the width when its siblings are centred.
+		divider.setOpaque(false);
+		divider.setBorder(new CompoundBorder(new EmptyBorder(6, 0, 6, 0), new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49))));
+		return divider;
 	}
 
 	private static final int HISTORY_VALUE_TIERS = 5;
@@ -1700,8 +1720,12 @@ public class BossTrackerPanel extends PluginPanel
 		}
 		// The date gets its own line: beside a long item name it wraps.
 		JLabel lastLabel = new JLabel(htmlLabel("Last Unique: ", priceCache.getName(streak.getLastUniqueItemId())));
-		JLabel dateLabel = new JLabel(htmlLabel("Dropped: ",
-			HISTORY_DAY_FORMAT.format(Instant.ofEpochMilli(streak.getLastUniqueAtEpochMilli()))));
+		String dropped = HISTORY_DAY_FORMAT.format(Instant.ofEpochMilli(streak.getLastUniqueAtEpochMilli()));
+		if (streak.getLastUniqueKillCount() > 0)
+		{
+			dropped += " · KC " + streak.getLastUniqueKillCount();
+		}
+		JLabel dateLabel = new JLabel(htmlLabel("Dropped: ", dropped));
 		return createStatsPanel(dryLabel, lastLabel, dateLabel);
 	}
 
@@ -1772,7 +1796,7 @@ public class BossTrackerPanel extends PluginPanel
 			if (NotableDrops.isPet(boss, itemId))
 			{
 				int count = item.getValue();
-				pets.add(priceCache.getName(itemId) + (count > 1 ? " x" + count : "") + " (pet)");
+				pets.add(priceCache.getName(itemId) + (count > 1 ? " x" + count : "") + " (pet)" + killCountSuffix(entry, itemId));
 			}
 			else if (NotableDrops.isNotable(boss, itemId, historyPrice(entry, itemId)))
 			{
@@ -1805,8 +1829,20 @@ public class BossTrackerPanel extends PluginPanel
 				// Untradeable cosmetics have no price to show.
 				tooltip.append(" (").append(GpFormat.abbreviated(value)).append(')');
 			}
+			tooltip.append(killCountSuffix(entry, itemId));
 		}
 		return tooltip.append("</html>").toString();
+	}
+
+	/** " · KC 34", or " · KC 12, 40" for two drops, or nothing when the kill count wasn't recorded. */
+	private static String killCountSuffix(SessionHistoryEntry entry, int itemId)
+	{
+		List<Integer> killCounts = entry.getUniqueKillCounts() != null ? entry.getUniqueKillCounts().get(itemId) : null;
+		if (killCounts == null || killCounts.isEmpty())
+		{
+			return "";
+		}
+		return " · KC " + killCounts.stream().map(String::valueOf).collect(Collectors.joining(", "));
 	}
 
 	private static final Color PET_GOLD = new Color(0xFFD700);

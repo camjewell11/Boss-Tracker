@@ -3,6 +3,7 @@ package com.camjewell.bosstracker.history;
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -10,9 +11,9 @@ import java.util.function.BiPredicate;
 import lombok.Value;
 
 /**
- * Kills since a boss last dropped a unique, counted from its saved sessions. History only keeps
- * each session's loot totals, not which kill dropped what, so the session holding the last unique
- * counts as ending the streak and only later sessions' kills count toward it.
+ * Kills since a boss last dropped a unique, counted from its saved sessions. The streak counts
+ * whole sessions: the session holding the last unique ends it and only later sessions' kills count
+ * toward it. Older sessions don't record which kill dropped what.
  */
 @Value
 public class DryStreak
@@ -23,6 +24,8 @@ public class DryStreak
 	int lastUniqueItemId;
 	/** When the session with the last unique ended, or 0 when there was none. */
 	long lastUniqueAtEpochMilli;
+	/** The kill count the last unique dropped on, or 0 when it wasn't recorded. */
+	int lastUniqueKillCount;
 
 	public boolean hasUnique()
 	{
@@ -41,19 +44,23 @@ public class DryStreak
 		int kills = 0;
 		for (SessionHistoryEntry entry : newestFirst)
 		{
-			int unique = firstUnique(entry, isUnique);
+			int unique = lastUnique(entry, isUnique);
 			if (unique != -1)
 			{
-				return new DryStreak(kills, unique, entry.getEndedAtEpochMilli());
+				return new DryStreak(kills, unique, entry.getEndedAtEpochMilli(), latestKillCount(entry, unique));
 			}
 			kills += entry.getKillsThisSession();
 		}
-		return new DryStreak(kills, -1, 0);
+		return new DryStreak(kills, -1, 0, 0);
 	}
 
-	/** The first unique found in the session's loot or minion loot, or -1. */
-	private static int firstUnique(SessionHistoryEntry entry, BiPredicate<SessionHistoryEntry, Integer> isUnique)
+	/**
+	 * The session's unique with the highest recorded kill count, or the first found when none was
+	 * recorded, from its loot or minion loot. -1 when it has no unique.
+	 */
+	private static int lastUnique(SessionHistoryEntry entry, BiPredicate<SessionHistoryEntry, Integer> isUnique)
 	{
+		int found = -1;
 		for (Map<Integer, Integer> loot : Arrays.asList(entry.getLootItemQuantities(), entry.getMinionLootItemQuantities()))
 		{
 			if (loot == null)
@@ -62,12 +69,20 @@ public class DryStreak
 			}
 			for (int itemId : loot.keySet())
 			{
-				if (isUnique.test(entry, itemId))
+				if (isUnique.test(entry, itemId)
+					&& (found == -1 || latestKillCount(entry, itemId) > latestKillCount(entry, found)))
 				{
-					return itemId;
+					found = itemId;
 				}
 			}
 		}
-		return -1;
+		return found;
+	}
+
+	/** The highest kill count the item dropped on in this session, or 0 when none was recorded. */
+	static int latestKillCount(SessionHistoryEntry entry, int itemId)
+	{
+		List<Integer> killCounts = entry.getUniqueKillCounts() != null ? entry.getUniqueKillCounts().get(itemId) : null;
+		return killCounts == null || killCounts.isEmpty() ? 0 : Collections.max(killCounts);
 	}
 }

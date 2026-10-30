@@ -54,6 +54,28 @@ public class DryStreakTest
 	}
 
 	@Test
+	public void lastUniqueIsTheOneWithTheHighestKillCount()
+	{
+		int laterUnique = 3;
+		SessionHistoryEntry entry = session(1000, 10, UNIQUE, laterUnique);
+		entry.getUniqueKillCounts().put(UNIQUE, Arrays.asList(102, 108));
+		entry.getUniqueKillCounts().put(laterUnique, Collections.singletonList(105));
+
+		DryStreak streak = DryStreak.compute(Collections.singletonList(entry), (e, id) -> id == UNIQUE || id == laterUnique);
+
+		assertEquals(UNIQUE, streak.getLastUniqueItemId());
+		assertEquals(108, streak.getLastUniqueKillCount());
+	}
+
+	@Test
+	public void olderSessionsHaveNoKillCount()
+	{
+		DryStreak streak = DryStreak.compute(Collections.singletonList(session(1000, 5, UNIQUE)), (entry, id) -> id == UNIQUE);
+
+		assertEquals(0, streak.getLastUniqueKillCount());
+	}
+
+	@Test
 	public void noUniqueCountsEverySession()
 	{
 		DryStreak streak = DryStreak.compute(Arrays.asList(session(1000, 8, JUNK), session(2000, 9)), (entry, id) -> id == UNIQUE);

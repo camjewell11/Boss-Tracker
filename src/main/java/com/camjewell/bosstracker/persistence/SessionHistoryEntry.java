@@ -60,4 +60,10 @@ public class SessionHistoryEntry
 	 * recorded, which fall back to current prices.
 	 */
 	private Map<Integer, Long> itemPricesAtDrop = new LinkedHashMap<>();
+
+	/**
+	 * The kill count each unique dropped on, oldest first. Empty for sessions saved before this
+	 * was recorded, and missing a unique whose kill count wasn't seen.
+	 */
+	private Map<Integer, List<Integer>> uniqueKillCounts = new LinkedHashMap<>();
 }

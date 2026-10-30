@@ -7,6 +7,7 @@ import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.BossStatsStore;
 import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.util.ItemPriceCache;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -94,6 +95,8 @@ public class LootTracker
 	@Getter
 	private final Map<Integer, Long> sessionDropPrices = new ConcurrentHashMap<>();
 
+	private final UniqueKillCounts uniqueKillCounts = new UniqueKillCounts();
+
 	@Getter
 	private int lifetimePerfectKills;
 
@@ -143,8 +146,21 @@ public class LootTracker
 		sessionPerfectBonusLoot.clear();
 		sessionPerfectKills = 0;
 		sessionDropPrices.clear();
+		uniqueKillCounts.clearDrops();
 		trackedBoss = null;
 		ensureLoaded(boss);
+	}
+
+	/** Called for every kill-count message, so uniques can record the kill they dropped on. */
+	public void onKillCount(Boss boss, int killCount)
+	{
+		uniqueKillCounts.onKillCount(boss, killCount, Instant.now());
+	}
+
+	/** Each of this session's uniques' kill counts, saved with the session in History. */
+	public Map<Integer, List<Integer>> getSessionUniqueKillCounts()
+	{
+		return uniqueKillCounts.byItem();
 	}
 
 	/**
@@ -270,10 +286,15 @@ public class LootTracker
 		{
 			sessionDropPrices.put(stack.getId(), priceCache.getPrice(stack.getId()));
 		}
+		Instant now = Instant.now();
 		for (ItemStack stack : bossItems)
 		{
 			sessionLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
 			lifetimeLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			if (NotableDrops.isNotable(sessionBoss, stack.getId(), sessionDropPrices.get(stack.getId())))
+			{
+				uniqueKillCounts.onUnique(sessionBoss, stack.getId(), now);
+			}
 		}
 		if (!bonusItems.isEmpty())
 		{
@@ -335,6 +356,7 @@ public class LootTracker
 		sessionDropPrices.put(petItemId, priceCache.getPrice(petItemId));
 		sessionLoot.merge(petItemId, 1, Integer::sum);
 		lifetimeLoot.merge(petItemId, 1, Integer::sum);
+		uniqueKillCounts.onUnique(boss, petItemId, Instant.now());
 		version++;
 		persistLoot(boss, Collections.singletonList(new ItemStack(petItemId, 1)));
 	}

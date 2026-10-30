@@ -172,6 +172,7 @@ public class SessionManager
 		{
 			int killCount = ChatKillParser.parseKillCount(message);
 			log.debug("KC message matched boss={} killCount={} message=\"{}\"", kcBoss, killCount, message);
+			lootTracker.onKillCount(kcBoss, killCount);
 			if (kcBoss.getTiming() == KillTiming.HITSPLAT)
 			{
 				finalizeHitsplatKill(kcBoss, killCount, resumedByThisMessage);
@@ -1031,6 +1032,7 @@ public class SessionManager
 		entry.setPerfectBonusItemQuantities(new LinkedHashMap<>(lootTracker.getSessionPerfectBonusLoot()));
 		entry.setPerfectKills(lootTracker.getSessionPerfectKills());
 		entry.setItemPricesAtDrop(new LinkedHashMap<>(lootTracker.getSessionDropPrices()));
+		entry.setUniqueKillCounts(lootTracker.getSessionUniqueKillCounts());
 		return entry;
 	}
 }
