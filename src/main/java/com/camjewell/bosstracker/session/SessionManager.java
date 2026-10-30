@@ -1033,6 +1033,7 @@ public class SessionManager
 		entry.setPerfectKills(lootTracker.getSessionPerfectKills());
 		entry.setItemPricesAtDrop(new LinkedHashMap<>(lootTracker.getSessionDropPrices()));
 		entry.setUniqueKillCounts(lootTracker.getSessionUniqueKillCounts());
+		entry.setNotes(endedSession.getNotes());
 		return entry;
 	}
 }

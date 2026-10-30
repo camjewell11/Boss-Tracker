@@ -30,6 +30,8 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.image.BufferedImage;
@@ -48,6 +50,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.swing.AbstractButton;
@@ -68,6 +71,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.ScrollPaneConstants;
@@ -145,6 +149,7 @@ public class BossTrackerPanel extends PluginPanel
 
 	private final JButton pauseResumeButton = new JButton("Pause");
 	private final JButton calcModeButton = new JButton("Actual");
+	private final JButton sessionNotesButton = new JButton("Notes");
 
 	private final JPanel goalsPanel = new JPanel(new BorderLayout());
 	private final JLabel goalIconLabel = new JLabel();
@@ -1189,9 +1194,25 @@ public class BossTrackerPanel extends PluginPanel
 		container.setOpaque(false);
 		container.setBorder(new MatteBorder(0, 0, 1, 0, new Color(37, 125, 141)));
 
-		JPanel buttonWrapper = new JPanel(new GridLayout(1, 1, 5, 5));
+		JPanel buttonWrapper = new JPanel(new GridLayout(1, 2, 5, 5));
 		buttonWrapper.setOpaque(false);
 		buttonWrapper.setBorder(new EmptyBorder(3, 10, 8, 10));
+
+		styleButton(sessionNotesButton);
+		sessionNotesButton.addActionListener(e ->
+		{
+			BossSession session = sessionManager.getSession();
+			if (session == null)
+			{
+				return;
+			}
+			String notes = editNotes(session.getBoss().getBossName(), session.getNotes());
+			if (notes != null)
+			{
+				session.setNotes(notes);
+				refresh();
+			}
+		});
 
 		JButton endSessionButton = new JButton("End Session");
 		styleButton(endSessionButton);
@@ -1201,9 +1222,98 @@ public class BossTrackerPanel extends PluginPanel
 			refresh();
 		});
 
+		buttonWrapper.add(sessionNotesButton);
 		buttonWrapper.add(endSessionButton);
 		container.add(buttonWrapper, BorderLayout.CENTER);
 		return container;
+	}
+
+	/** Notes go on the running session; an ended one is edited from its History row instead. */
+	private void refreshSessionNotesButton(BossSession session)
+	{
+		sessionNotesButton.setEnabled(session != null);
+		if (session == null)
+		{
+			sessionNotesButton.setText("Notes");
+			sessionNotesButton.setToolTipText("Add notes while a session is running, or to a saved session from History");
+		}
+		else if (session.getNotes().isEmpty())
+		{
+			sessionNotesButton.setText("Add Notes");
+			sessionNotesButton.setToolTipText("Notes are saved with this session when it ends");
+		}
+		else
+		{
+			sessionNotesButton.setText("Edit Notes");
+			sessionNotesButton.setToolTipText("<html>" + notesHtml(session.getNotes()) + "</html>");
+		}
+	}
+
+	/** Opens an editor on a session's notes. Returns the new notes, or null if cancelled. */
+	private String editNotes(String bossName, String notes)
+	{
+		JTextArea area = new JTextArea(notes, 6, 22);
+		area.setLineWrap(true);
+		area.setWrapStyleWord(true);
+		SwingUtilities.invokeLater(area::requestFocusInWindow);
+		int option = JOptionPane.showConfirmDialog(this, new JScrollPane(area), "Session Notes (" + bossName + ")",
+			JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+		return option == JOptionPane.OK_OPTION ? area.getText().trim() : null;
+	}
+
+	/** Wide enough to fill a search card or History row without pushing the panel wider. */
+	private static final int NOTES_TEXT_WIDTH = 165;
+
+	/** Notes as wrapping text, keeping the player's line breaks. */
+	private static JLabel notesLabel(String notes)
+	{
+		JLabel label = new JLabel("<html><body style='width: " + NOTES_TEXT_WIDTH + "px'>" + notesHtml(notes) + "</body></html>");
+		label.setAlignmentX(Component.LEFT_ALIGNMENT);
+		return label;
+	}
+
+	private static String notesHtml(String notes)
+	{
+		return notes.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>");
+	}
+
+	/** A boss's session notes, newest first, each under the session's date and kills. */
+	private JPanel buildNotesSection(List<SessionHistoryEntry> sessions)
+	{
+		JPanel section = new JPanel()
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		// Each row stretched across the card and its text set left, in line with the stats above;
+		// in a BoxLayout the rows landed off-centre.
+		section.setLayout(new GridBagLayout());
+		section.setOpaque(false);
+		GridBagConstraints row = new GridBagConstraints();
+		row.gridx = 0;
+		row.weightx = 1;
+		row.fill = GridBagConstraints.HORIZONTAL;
+		row.anchor = GridBagConstraints.WEST;
+
+		JLabel title = new JLabel("Notes");
+		title.setForeground(Color.WHITE);
+		section.add(title, row);
+
+		for (SessionHistoryEntry entry : sessions)
+		{
+			int kills = entry.getKillsThisSession();
+			JLabel dateLabel = new JLabel(HISTORY_DATE_FORMAT.format(Instant.ofEpochMilli(entry.getEndedAtEpochMilli()))
+				+ " · " + kills + (kills == 1 ? " kill" : " kills"));
+			dateLabel.setFont(FontManager.getRunescapeSmallFont());
+			dateLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+			dateLabel.setBorder(new EmptyBorder(6, 0, 1, 0));
+			section.add(dateLabel, row);
+			section.add(notesLabel(entry.getNotes()), row);
+		}
+		return section;
 	}
 
 	/**
@@ -1262,6 +1372,7 @@ public class BossTrackerPanel extends PluginPanel
 			showTeamDeaths(false);
 			pauseResumeButton.setText("Pause");
 			calcModeButton.setText("Actual");
+			refreshSessionNotesButton(null);
 			refreshGoalsPanel(null);
 			refreshLootPanel(null);
 			refreshHistoryPanel();
@@ -1289,6 +1400,7 @@ public class BossTrackerPanel extends PluginPanel
 
 		pauseResumeButton.setText(session != null && session.isPaused() ? "Resume" : "Pause");
 		calcModeButton.setText(display.getCalcMode() == CalcMode.VIRTUAL ? "Virtual" : "Actual");
+		refreshSessionNotesButton(session);
 
 		refreshGoalsPanel(display);
 		refreshLootPanel(display);
@@ -1639,6 +1751,15 @@ public class BossTrackerPanel extends PluginPanel
 				lootGrid.add(slot);
 			}
 			detailPanel.add(lootGrid);
+		}
+
+		List<SessionHistoryEntry> withNotes = bossHistory.stream()
+			.filter(entry -> entry.getNotes() != null && !entry.getNotes().isEmpty())
+			.collect(Collectors.toList());
+		if (!withNotes.isEmpty())
+		{
+			detailPanel.add(sectionDivider());
+			detailPanel.add(buildNotesSection(withNotes));
 		}
 
 		JPanel deleteButtonPanel = new JPanel(new GridLayout(1, 1, 5, 5));
@@ -2531,7 +2652,49 @@ public class BossTrackerPanel extends PluginPanel
 				"Perfect Kills", entry.getPerfectKills(), "Bonus GP"));
 		}
 
+		detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+		detailPanel.add(buildHistoryNotesSection(entry));
+
 		return detailPanel;
+	}
+
+	/** Saves a change to a saved session and redraws the rows and search that show it. */
+	private void saveHistoryEdit(SessionHistoryEntry entry, Consumer<SessionHistoryEntry> change)
+	{
+		historyManager.edit(entry, change);
+		refreshHistoryPanel();
+		refreshSearchPanel();
+	}
+
+	/** A saved session's notes, if any, and the button that adds or edits them. */
+	private JPanel buildHistoryNotesSection(SessionHistoryEntry entry)
+	{
+		String notes = entry.getNotes() == null ? "" : entry.getNotes();
+
+		JPanel section = new JPanel(new BorderLayout(0, 6));
+		section.setOpaque(false);
+		section.setBorder(new CompoundBorder(new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49)), new EmptyBorder(8, 0, 0, 0)));
+
+		if (!notes.isEmpty())
+		{
+			section.add(notesLabel(notes), BorderLayout.CENTER);
+		}
+
+		JButton editButton = new JButton(notes.isEmpty() ? "Add Notes" : "Edit Notes");
+		styleButton(editButton);
+		editButton.addActionListener(e ->
+		{
+			String edited = editNotes(entry.getBossName(), notes);
+			if (edited != null && !edited.equals(notes))
+			{
+				saveHistoryEdit(entry, saved -> saved.setNotes(edited));
+			}
+		});
+		JPanel buttonWrapper = new JPanel(new GridLayout(1, 1));
+		buttonWrapper.setOpaque(false);
+		buttonWrapper.add(editButton);
+		section.add(buttonWrapper, BorderLayout.SOUTH);
+		return section;
 	}
 
 	/**

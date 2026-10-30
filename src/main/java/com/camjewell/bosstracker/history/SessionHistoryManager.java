@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Getter;
@@ -103,6 +104,24 @@ public class SessionHistoryManager
 				loading = false;
 			});
 		});
+	}
+
+	/**
+	 * Applies the player's edit to a saved session (its notes or splits) and rewrites its file.
+	 * The edit should replace fields whole, as the file is written on another thread.
+	 */
+	public void edit(SessionHistoryEntry entry, Consumer<SessionHistoryEntry> change)
+	{
+		change.accept(entry);
+		version++;
+
+		if (asyncExecutor == null)
+		{
+			return;
+		}
+
+		long accountHash = client.getAccountHash();
+		asyncExecutor.execute(() -> store.save(accountHash, entry));
 	}
 
 	public void delete(SessionHistoryEntry entry)

@@ -59,6 +59,9 @@ public class BossSession
 	private int teamDeaths;
 	private int ownDeaths;
 
+	/** The player's notes, saved with the session. Written from the Swing thread. */
+	private volatile String notes = "";
+
 	/** Oldest first; the last one is still open unless a death, bank or the session ended it. */
 	private final List<Trip> trips = new ArrayList<>();
 

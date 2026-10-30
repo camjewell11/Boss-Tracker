@@ -28,6 +28,18 @@ public class SessionHistoryEntryTest
 		assertTrue(entry.getMinionLootItemQuantities().isEmpty());
 		assertEquals(0, entry.getMinionKills());
 		assertEquals(15, entry.getKillsThisSession());
+		assertEquals("", entry.getNotes());
+	}
+
+	@Test
+	public void notesRoundTripWithLineBreaks()
+	{
+		SessionHistoryEntry entry = new SessionHistoryEntry();
+		entry.setBossName("Fractured Archive");
+		entry.setNotes("Team of 6\nCrossbows at 43 & sold");
+
+		SessionHistoryEntry loaded = gson.fromJson(gson.toJson(entry), SessionHistoryEntry.class);
+		assertEquals("Team of 6\nCrossbows at 43 & sold", loaded.getNotes());
 	}
 
 	@Test

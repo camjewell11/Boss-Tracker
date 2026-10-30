@@ -66,4 +66,7 @@ public class SessionHistoryEntry
 	 * was recorded, and missing a unique whose kill count wasn't seen.
 	 */
 	private Map<Integer, List<Integer>> uniqueKillCounts = new LinkedHashMap<>();
+
+	/** The player's own notes, written during the session or edited later from History. */
+	private String notes = "";
 }
