@@ -2933,7 +2933,7 @@ public class BossTrackerPanel extends PluginPanel
 			historyLegendPanel.add(legendLabel(value + "+", historyTierColor(tier)));
 		}
 		historyLegendPanel.add(legendLabel("Pet", PET_GOLD));
-		historyLegendPanel.setToolTipText("<html>Row colours: the highest tier a session's loot reaches. A fade into gold means a pet dropped."
+		historyLegendPanel.setToolTipText("<html>Row colours: the highest tier a session's loot reaches, counting only your share of any unique you split. A fade into gold means a pet dropped."
 			+ "<br>A fade into a tier's colour means your share of a teammate's unique reached it.</html>");
 		historyLegendPanel.setVisible(true);
 		historyLegendPanel.revalidate();
@@ -3055,7 +3055,9 @@ public class BossTrackerPanel extends PluginPanel
 		expandButton.setHorizontalAlignment(SwingConstants.LEFT);
 		expandButton.setSelected(expandedHistoryEntryIds.contains(entry.getEndedAtEpochMilli()));
 
-		int valueTier = historyTierMet(totalGp);
+		// Coloured by what the player kept: a split unique counts only their share of it
+		int valueTier = historyTierMet(totalGp - UniqueSplits.givenAway(entry.getLootItemQuantities(), entry.getUniqueSplits(),
+			itemId -> historyPrice(entry, itemId)));
 		Color valueColor = valueTier == 0 ? null : historyTierColor(valueTier);
 		styleButton(expandButton, valueColor != null ? valueColor : Color.WHITE);
 		// A teammate's unique isn't in the loot total, so the player's share of it fades in
