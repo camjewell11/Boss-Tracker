@@ -2433,7 +2433,7 @@ public class BossTrackerPanel extends PluginPanel
 		return atDrop != null ? atDrop : priceCache.getPrice(itemId);
 	}
 
-	/** A saved session's regular loot value, used for its row colour, sorting and day totals. */
+	/** A saved session's regular loot value, used for sorting and as the base of {@link #historySplitValue}. */
 	private double historyLootValue(SessionHistoryEntry entry)
 	{
 		double total = 0;
@@ -2442,6 +2442,13 @@ public class BossTrackerPanel extends PluginPanel
 			total += (double) historyPrice(entry, item.getKey()) * item.getValue();
 		}
 		return total;
+	}
+
+	/** What a saved session made the player: its loot value once uniques' splits and teammates' shares are counted. */
+	private double historySplitValue(SessionHistoryEntry entry)
+	{
+		return UniqueSplits.afterSplits(historyLootValue(entry), entry.getLootItemQuantities(), entry.getUniqueSplits(),
+			entry.getTeammateUniques(), itemId -> historyPrice(entry, itemId));
 	}
 
 	/** The session's regular and minion loot combined, which is where uniques can come from. */
@@ -2855,7 +2862,7 @@ public class BossTrackerPanel extends PluginPanel
 		double total = 0;
 		for (SessionHistoryEntry entry : sessions)
 		{
-			total += historyLootValue(entry);
+			total += historySplitValue(entry);
 		}
 		JLabel label = new JLabel(htmlLabel(range.getLabel() + "  ",
 			sessions.size() + (sessions.size() == 1 ? " session · " : " sessions · ") + GpFormat.abbreviated(total)));
@@ -2880,7 +2887,7 @@ public class BossTrackerPanel extends PluginPanel
 		double total = 0;
 		for (SessionHistoryEntry entry : day)
 		{
-			total += historyLootValue(entry);
+			total += historySplitValue(entry);
 		}
 		JLabel label = new JLabel(htmlLabel(HISTORY_DAY_FORMAT.format(Instant.ofEpochMilli(day.get(0).getEndedAtEpochMilli())) + "  ",
 			day.size() + (day.size() == 1 ? " session · " : " sessions · ") + GpFormat.abbreviated(total)));
