@@ -86,6 +86,7 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
 import javax.swing.border.MatteBorder;
 import javax.swing.plaf.basic.BasicComboPopup;
 import javax.swing.plaf.basic.BasicScrollBarUI;
@@ -1745,6 +1746,8 @@ public class BossTrackerPanel extends PluginPanel
 
 		JButton addButton = new JButton("Add Teammate's Unique");
 		styleButton(addButton);
+		// Drawn outright: built after the panel, it came out with no visible outline, unlike the panel's other buttons
+		addButton.setBorder(new CompoundBorder(new LineBorder(new Color(122, 138, 153)), new EmptyBorder(addButton.getMargin())));
 		addButton.addActionListener(e ->
 		{
 			TeammateUnique added = askTeammateUnique(boss, askValue);
