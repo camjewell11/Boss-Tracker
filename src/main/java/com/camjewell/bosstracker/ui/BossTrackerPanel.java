@@ -38,6 +38,7 @@ import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.image.BufferedImage;
+import java.text.ParseException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -173,7 +174,6 @@ public class BossTrackerPanel extends PluginPanel
 	private final JLabel goalLootLabel = new JLabel(htmlLabel("Loot Goal: ", "N/A"));
 	private final SpinnerNumberModel goalStartKcModel = new SpinnerNumberModel(0, 0, 10_000_000, 1);
 	private final SpinnerNumberModel goalEndKcModel = new SpinnerNumberModel(0, 0, 10_000_000, 5);
-	private final SpinnerNumberModel goalLootGpModel = new SpinnerNumberModel(0L, 0L, 100_000_000_000L, 100_000L);
 
 	private final JToggleButton lootCollapseButton = createDarkToggleButton("Loot ▾");
 	private final JToggleButton showIgnoredLootButton = createDarkToggleButton("Show Ignored");
@@ -697,28 +697,58 @@ public class BossTrackerPanel extends PluginPanel
 		goalStartKcModel.setValue(liveKc);
 		goalEndKcModel.setMinimum(liveKc);
 		goalEndKcModel.setValue(Math.max(liveKc, goal.getEndKc()));
-		goalLootGpModel.setValue(goal.getLootGoalGp());
 
 		JSpinner startSpinner = new JSpinner(goalStartKcModel);
 		JSpinner endSpinner = new JSpinner(goalEndKcModel);
-		JSpinner lootGpSpinner = new JSpinner(goalLootGpModel);
+		// Text rather than a spinner, so "50m" works: a spinner silently drops anything it can't
+		// parse, and also a typed value that was never committed, leaving the goal at 0.
+		JTextField lootGpField = new JTextField(goal.isLootGoalSet() ? GpFormat.shorthand(goal.getLootGoalGp()) : "");
 
 		JPanel inputPanel = new JPanel(new GridLayout(0, 2, 5, 5));
 		inputPanel.add(new JLabel("Start KC:"));
 		inputPanel.add(startSpinner);
 		inputPanel.add(new JLabel("End KC:"));
 		inputPanel.add(endSpinner);
-		inputPanel.add(new JLabel("Loot Goal (GP, 0 = off):"));
-		inputPanel.add(lootGpSpinner);
+		inputPanel.add(new JLabel("Loot Goal, e.g. 50m:"));
+		inputPanel.add(lootGpField);
 
-		int option = JOptionPane.showConfirmDialog(null, inputPanel, "Set Boss Goal (" + goal.getBoss().getBossName() + ")",
-			JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-
-		if (option == JOptionPane.OK_OPTION)
+		String title = "Set Boss Goal (" + goal.getBoss().getBossName() + ")";
+		while (true)
 		{
+			int option = JOptionPane.showConfirmDialog(null, inputPanel, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+			if (option != JOptionPane.OK_OPTION)
+			{
+				return;
+			}
+
+			String lootText = lootGpField.getText().trim();
+			long lootGoalGp = lootText.isEmpty() ? 0 : GpValue.parse(lootText);
+			if (lootGoalGp == GpValue.INVALID)
+			{
+				JOptionPane.showMessageDialog(null, "\"" + lootText + "\" isn't an amount. Type it like 50m, 1.2b or 50,000,000, or leave it blank for no loot goal.",
+					title, JOptionPane.WARNING_MESSAGE);
+				continue;
+			}
+
+			commitSpinner(startSpinner);
+			commitSpinner(endSpinner);
 			goalManager.setGoal((int) goalStartKcModel.getValue(), (int) goalEndKcModel.getValue());
-			goalManager.setLootGoal((long) goalLootGpModel.getValue());
+			goalManager.setLootGoal(lootGoalGp);
 			refresh();
+			return;
+		}
+	}
+
+	/** Takes a number typed into the spinner but not yet entered, rather than its last value. */
+	private static void commitSpinner(JSpinner spinner)
+	{
+		try
+		{
+			spinner.commitEdit();
+		}
+		catch (ParseException e)
+		{
+			// Not a number: the spinner keeps its last value.
 		}
 	}
 
