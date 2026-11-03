@@ -87,6 +87,7 @@ public enum Boss
 	VENENATIS("Venenatis", ItemID.VENENATIS_PET, 250, "Your Venenatis kill count is:"),
 	SPINDEL("Spindel", ItemID.VENENATIS_PET_LEGACY, 250, "Your Spindel kill count is:"),
 	SCURRIUS("Scurrius", ItemID.SCURRIUSPET, 250, "Your Scurrius kill count is:"),
+	HESPORI("Hespori", ItemID.HESPORI_SEED, 220, "Your Hespori kill count is:"),
 	BARROWS("Barrows", ItemID.BARROWS_VERAC_HEAD, 1500, "Your Barrows chest count is:", TimingFamily.BARROWS,
 		Arrays.asList("Barrows", "Verac the Defiled", "Torag the Corrupted", "Karil the Tainted",
 			"Guthan the Infested", "Dharok the Wretched", "Ahrim the Blighted")),
@@ -238,6 +239,7 @@ public enum Boss
 		PET_ITEM_OVERRIDES.put(CRAZY_ARCHAEOLOGIST, -1);
 		PET_ITEM_OVERRIDES.put(DERANGED_ARCHAEOLOGIST, -1);
 		PET_ITEM_OVERRIDES.put(DAGANNOTH_KINGS, -1);
+		PET_ITEM_OVERRIDES.put(HESPORI, -1);
 		PET_ITEM_OVERRIDES.put(CHAOS_FANATIC, ItemID.CHAOSELEPET);
 		PET_ITEM_OVERRIDES.put(THEATRE_OF_BLOOD_HM, ItemID.VERZIKPET);
 

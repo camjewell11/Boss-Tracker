@@ -8,7 +8,7 @@ import net.runelite.api.gameval.ItemID;
 
 /**
  * Which drops count as uniques: the boss's pet, anything worth at least {@link #MIN_UNIT_GP} each,
- * and raid cosmetics whatever their price. Shared by the History hover text and dry streaks so
+ * and a few rare drops whatever their price. Shared by the History hover text and dry streaks so
  * the two always agree.
  */
 public final class NotableDrops
@@ -17,11 +17,11 @@ public final class NotableDrops
 	public static final long MIN_UNIT_GP = 1_000_000;
 
 	/**
-	 * Raid cosmetics and other rare raid drops: several are worth well under the threshold or can't
-	 * be traded at all, but are still uniques. In-game names noted, since several gameval names
-	 * don't resemble them.
+	 * Raid cosmetics and other rare drops: several are worth well under the threshold or can't be
+	 * traded at all, but are still uniques. In-game names noted, since several gameval names don't
+	 * resemble them.
 	 */
-	private static final Set<Integer> RAID_COSMETICS = new HashSet<>(Arrays.asList(
+	private static final Set<Integer> UNIQUES_AT_ANY_PRICE = new HashSet<>(Arrays.asList(
 		ItemID.ANCESTRAL_ROBES_TWISTED_KIT,     // Twisted ancestral colour kit (CoX)
 		ItemID.RAIDS_CHALLENGE_MORPH,           // Metamorphic dust (CoX)
 		ItemID.TOB_HARDMODE_KIT,                // Holy ornament kit (ToB)
@@ -41,7 +41,8 @@ public final class NotableDrops
 		ItemID.TFA_MOTE_AIR,                    // Fragment of whispering wind (Fractured Archive)
 		ItemID.TFA_MOTE_WATER,                  // Fragment of deep water (Fractured Archive)
 		ItemID.TFA_MOTE_EARTH,                  // Fragment of living earth (Fractured Archive)
-		ItemID.TFA_MOTE_FIRE));                 // Fragment of burning fire (Fractured Archive)
+		ItemID.TFA_MOTE_FIRE,                   // Fragment of burning fire (Fractured Archive)
+		ItemID.BOTTOMLESS_COMPOST_BUCKET));     // Bottomless compost bucket (Hespori)
 
 	private NotableDrops()
 	{
@@ -57,6 +58,6 @@ public final class NotableDrops
 	 */
 	public static boolean isNotable(Boss boss, int itemId, long unitPrice)
 	{
-		return isPet(boss, itemId) || unitPrice >= MIN_UNIT_GP || RAID_COSMETICS.contains(itemId);
+		return isPet(boss, itemId) || unitPrice >= MIN_UNIT_GP || UNIQUES_AT_ANY_PRICE.contains(itemId);
 	}
 }
