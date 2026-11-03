@@ -56,6 +56,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.IntToLongFunction;
 import java.util.stream.Collectors;
@@ -1759,7 +1760,8 @@ public class BossTrackerPanel extends PluginPanel
 					if (splitSize != null)
 					{
 						List<TeammateUnique> updated = new ArrayList<>(uniques);
-						updated.set(index, new TeammateUnique(unique.getItemId(), unique.getItemName(), splitSize, unique.getPrice()));
+						updated.set(index, new TeammateUnique(unique.getItemId(), unique.getItemName(), splitSize, unique.getPrice(),
+							unique.getKillCount()));
 						save.accept(Collections.unmodifiableList(updated));
 					}
 				});
@@ -1780,7 +1782,8 @@ public class BossTrackerPanel extends PluginPanel
 						if (value != null)
 						{
 							List<TeammateUnique> updated = new ArrayList<>(uniques);
-							updated.set(index, new TeammateUnique(unique.getItemId(), unique.getItemName(), unique.getSplitSize(), value));
+							updated.set(index, new TeammateUnique(unique.getItemId(), unique.getItemName(), unique.getSplitSize(), value,
+								unique.getKillCount()));
 							save.accept(Collections.unmodifiableList(updated));
 						}
 					});
@@ -1808,6 +1811,12 @@ public class BossTrackerPanel extends PluginPanel
 			TeammateUnique added = askTeammateUnique(boss, askValue);
 			if (added != null)
 			{
+				BossSession live = sessionManager.getSession();
+				if (!askValue && live != null)
+				{
+					// Added during the session, so taken as the raid just done: its purple streak restarts here.
+					added.setKillCount(live.getKillCount());
+				}
 				List<TeammateUnique> updated = new ArrayList<>(uniques);
 				updated.add(added);
 				save.accept(Collections.unmodifiableList(updated));
@@ -2326,7 +2335,7 @@ public class BossTrackerPanel extends PluginPanel
 		if (!bossHistory.isEmpty() || (liveSession != null && liveSession.getBoss() == boss))
 		{
 			detailPanel.add(Box.createRigidArea(new Dimension(0, 4)));
-			detailPanel.add(buildDryStreakPanel(boss, bossHistory, liveSession));
+			detailPanel.add(buildDryStreakPanel(boss, bossHistory, liveSession, stats.getTotalKc()));
 		}
 
 		List<TeammateUnique> teammateUniques = boss.isRaid() ? lifetimeTeammateUniques(boss) : Collections.emptyList();
@@ -2453,23 +2462,29 @@ public class BossTrackerPanel extends PluginPanel
 		return sessions;
 	}
 
+	/** Marks the live session among saved ones for the purple streaks: it ends after all of them. */
+	private static final long LIVE_SESSION_ENDED_AT = Long.MAX_VALUE;
+
 	/**
 	 * Kills since the boss's last unique, counting the live session when it's on this boss. A
-	 * session's kills after its unique aren't known, so the streak restarts at that session.
+	 * session's kills after its unique aren't known, so the streak restarts at that session. With
+	 * {@link BossTrackerConfig#raidPurpleStreaks}, a raid shows its two purple streaks instead.
 	 */
-	private JPanel buildDryStreakPanel(Boss boss, List<SessionHistoryEntry> bossHistory, BossSession liveSession)
+	private JPanel buildDryStreakPanel(Boss boss, List<SessionHistoryEntry> bossHistory, BossSession liveSession, int totalKc)
 	{
+		boolean liveOnBoss = liveSession != null && liveSession.getBoss() == boss;
+		if (boss.isRaid() && config.raidPurpleStreaks())
+		{
+			return buildPurpleStreaksPanel(boss, bossHistory, liveOnBoss ? liveSession : null, totalKc);
+		}
+
 		DryStreak streak = DryStreak.compute(bossHistory,
 			(entry, itemId) -> NotableDrops.isNotable(boss, itemId, historyPrice(entry, itemId)));
-
 		String dryText;
-		if (liveSession != null && liveSession.getBoss() == boss)
+		if (liveOnBoss)
 		{
-			boolean uniqueThisSession = false;
-			for (int itemId : lootTracker.getSessionLoot().keySet())
-			{
-				uniqueThisSession |= NotableDrops.isNotable(boss, itemId, priceCache.getPrice(itemId));
-			}
+			boolean uniqueThisSession = lootTracker.getSessionLoot().keySet().stream()
+				.anyMatch(itemId -> NotableDrops.isNotable(boss, itemId, priceCache.getPrice(itemId)));
 			dryText = uniqueThisSession ? "Unique this session"
 				: (streak.getKills() + liveSession.getKillsThisSession()) + " kills";
 		}
@@ -2477,22 +2492,76 @@ public class BossTrackerPanel extends PluginPanel
 		{
 			dryText = streak.getKills() + " kills";
 		}
+		List<JLabel> labels = dryStreakLabels("Dry Streak: ", dryText, "Last Unique: ", streak);
+		labels.get(0).setToolTipText("Kills since a pet, a raid cosmetic or similar rare drop, or a drop worth 1m+ each, from saved sessions");
+		return createStatsPanel(labels.toArray(new JLabel[0]));
+	}
 
-		JLabel dryLabel = new JLabel(htmlLabel("Dry Streak: ", dryText));
-		dryLabel.setToolTipText("Kills since a pet, a raid cosmetic or similar rare drop, or a drop worth 1m+ each, from saved sessions");
+	/**
+	 * Kills since a purple (a tradeable unique) in the player's name, and since one in anyone's,
+	 * counting the teammates' uniques the player added. A teammate's added during a session counts
+	 * from the kill count it was added on; so does the player's own, from the one it dropped on.
+	 */
+	private JPanel buildPurpleStreaksPanel(Boss boss, List<SessionHistoryEntry> bossHistory, BossSession liveSession, int totalKc)
+	{
+		List<SessionHistoryEntry> sessions = new ArrayList<>(bossHistory);
+		if (liveSession != null)
+		{
+			sessions.add(liveHistoryEntry(liveSession));
+		}
+		int currentKc = liveSession != null ? liveSession.getKillCount() : totalKc;
+		BiPredicate<SessionHistoryEntry, Integer> isPurple = (entry, itemId) ->
+			priceCache.isTradeable(itemId) && NotableDrops.isNotable(boss, itemId, historyPrice(entry, itemId));
+
+		DryStreak yours = DryStreak.compute(sessions, isPurple);
+		List<JLabel> labels = new ArrayList<>(dryStreakLabels("Your Purple Streak: ", yours.killsSince(currentKc) + " kills",
+			"Your Last Purple: ", yours));
+		labels.get(0).setToolTipText("Kills since a tradeable unique in your name. Teammates' uniques don't count.");
+
+		DryStreak team = DryStreak.compute(sessions, isPurple, true);
+		List<JLabel> teamLabels = dryStreakLabels("Team Purple Streak: ", team.killsSince(currentKc) + " kills",
+			"Team's Last Purple: ", team);
+		teamLabels.get(0).setToolTipText("Kills since anyone got a tradeable unique: yours, or a teammate's you added");
+		// When your purple was the team's last one, its item and date are already shown above.
+		boolean sameLast = !team.isLastUniqueTeammates() && team.getLastUniqueAtEpochMilli() == yours.getLastUniqueAtEpochMilli();
+		labels.addAll(sameLast ? teamLabels.subList(0, 1) : teamLabels);
+		return createStatsPanel(labels.toArray(new JLabel[0]));
+	}
+
+	/** The live session's loot and teammates' uniques, as if it were saved now, for the streaks to count. */
+	private SessionHistoryEntry liveHistoryEntry(BossSession liveSession)
+	{
+		SessionHistoryEntry entry = new SessionHistoryEntry();
+		entry.setEndedAtEpochMilli(LIVE_SESSION_ENDED_AT);
+		entry.setKillsThisSession(liveSession.getKillsThisSession());
+		entry.setLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionLoot()));
+		entry.setMinionLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionMinionLoot()));
+		entry.setItemPricesAtDrop(new LinkedHashMap<>(lootTracker.getSessionDropPrices()));
+		entry.setUniqueKillCounts(lootTracker.getSessionUniqueKillCounts());
+		entry.setTeammateUniques(new ArrayList<>(liveSession.getTeammateUniques()));
+		return entry;
+	}
+
+	/** A streak's line, then its last unique and when it dropped. */
+	private List<JLabel> dryStreakLabels(String streakName, String dryText, String lastName, DryStreak streak)
+	{
+		JLabel dryLabel = new JLabel(htmlLabel(streakName, dryText));
 		if (!streak.hasUnique())
 		{
-			return createStatsPanel(dryLabel, new JLabel(htmlLabel("Last Unique: ", "None in saved sessions")));
+			return Arrays.asList(dryLabel, new JLabel(htmlLabel(lastName, "None in saved sessions")));
 		}
 		// The date gets its own line: beside a long item name it wraps.
-		JLabel lastLabel = new JLabel(htmlLabel("Last Unique: ", priceCache.getName(streak.getLastUniqueItemId())));
-		String dropped = HISTORY_DAY_FORMAT.format(Instant.ofEpochMilli(streak.getLastUniqueAtEpochMilli()));
+		String lastText = streak.isLastUniqueTeammates() ? streak.getTeammateItemName() + " (teammate's)"
+			: priceCache.getName(streak.getLastUniqueItemId());
+		JLabel lastLabel = new JLabel(htmlLabel(lastName, lastText));
+		String dropped = streak.getLastUniqueAtEpochMilli() == LIVE_SESSION_ENDED_AT ? "This session"
+			: HISTORY_DAY_FORMAT.format(Instant.ofEpochMilli(streak.getLastUniqueAtEpochMilli()));
 		if (streak.getLastUniqueKillCount() > 0)
 		{
 			dropped += " · KC " + streak.getLastUniqueKillCount();
 		}
 		JLabel dateLabel = new JLabel(htmlLabel("Dropped: ", dropped));
-		return createStatsPanel(dryLabel, lastLabel, dateLabel);
+		return Arrays.asList(dryLabel, lastLabel, dateLabel);
 	}
 
 	/**

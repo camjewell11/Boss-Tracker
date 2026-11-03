@@ -24,6 +24,7 @@ public class ItemPriceCache
 	private final Map<Integer, Long> prices = new ConcurrentHashMap<>();
 	private final Map<Integer, Long> haPrices = new ConcurrentHashMap<>();
 	private final Map<Integer, String> names = new ConcurrentHashMap<>();
+	private final Map<Integer, Boolean> tradeable = new ConcurrentHashMap<>();
 
 	/**
 	 * Must be called from the client thread.
@@ -32,10 +33,11 @@ public class ItemPriceCache
 	{
 		prices.put(itemId, (long) itemManager.getItemPrice(itemId));
 
-		// One composition lookup covers both; it is the expensive, client-thread-only part.
+		// One composition lookup covers all three; it is the expensive, client-thread-only part.
 		ItemComposition composition = itemManager.getItemComposition(itemId);
 		names.put(itemId, composition.getName());
 		haPrices.put(itemId, (long) composition.getHaPrice());
+		tradeable.put(itemId, composition.isTradeable());
 	}
 
 	/**
@@ -59,6 +61,12 @@ public class ItemPriceCache
 	public String getName(int itemId)
 	{
 		return names.getOrDefault(itemId, "Unknown item");
+	}
+
+	/** Whether the item can be traded; false until it's been warmed. */
+	public boolean isTradeable(int itemId)
+	{
+		return tradeable.getOrDefault(itemId, false);
 	}
 
 	/**

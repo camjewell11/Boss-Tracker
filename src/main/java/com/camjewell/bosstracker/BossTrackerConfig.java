@@ -385,6 +385,19 @@ public interface BossTrackerConfig extends Config
 		return LootDisplayMode.SESSION;
 	}
 
+	@ConfigItem(
+		position = 1,
+		keyName = "raidPurpleStreaks",
+		name = "Raid Purple Streaks",
+		description = "In a raid's lookup, shows two streaks in place of its dry streak: kills since a tradeable unique in your name,"
+			+ " and since anyone's, counting the teammates' uniques you add from the raid you add them on",
+		section = lootSection
+	)
+	default boolean raidPurpleStreaks()
+	{
+		return false;
+	}
+
 	// ---- History Highlight ----
 
 	@ConfigItem(
