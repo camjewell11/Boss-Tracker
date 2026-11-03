@@ -5,6 +5,7 @@ import com.camjewell.bosstracker.boss.Boss;
 import com.camjewell.bosstracker.boss.KillTiming;
 import com.camjewell.bosstracker.boss.TimingFamily;
 import com.camjewell.bosstracker.chat.ChatKillParser;
+import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.BossStatsStore;
@@ -17,6 +18,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.concurrent.Executor;
 import javax.inject.Inject;
@@ -25,11 +27,13 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.api.NPC;
 import net.runelite.api.Player;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.VarbitID;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.game.ItemStack;
@@ -68,6 +72,12 @@ public class SessionManager
 
 	@Inject
 	private BossAreaTracker areaTracker;
+
+	@Inject
+	private SessionHistoryManager historyManager;
+
+	@Inject
+	private ClientThread clientThread;
 
 	/**
 	 * Ticks spent outside the boss's learned area during an open trip. A few are allowed so a
@@ -875,6 +885,103 @@ public class SessionManager
 		}
 	}
 
+	/**
+	 * Picks the last ended session back up, as though it had only been paused: its kills, loot,
+	 * trips, splits and notes carry on, and the time since it ended doesn't count. Its History
+	 * entry is removed, as ending it again saves the whole session afresh. Does nothing while a
+	 * session is running. Callable from any thread.
+	 */
+	public void resumeLastSession()
+	{
+		// Logged out, there's no account to read the History of
+		if (asyncExecutor == null || client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+		long accountHash = client.getAccountHash();
+		asyncExecutor.execute(() ->
+		{
+			// The same executor saves ended sessions, so one ended just now is already on disk.
+			SessionHistoryEntry entry = historyStore.loadNewest(accountHash);
+			Boss boss = entry != null ? Boss.byName(entry.getBossName()) : null;
+			if (boss == null)
+			{
+				queueGameMessage("There's no ended session to resume");
+				return;
+			}
+			int killCount = statsStore.load(accountHash, boss).getTotalKc();
+			clientThread.invoke(() -> restoreSession(accountHash, entry, boss, killCount));
+		});
+	}
+
+	private void restoreSession(long accountHash, SessionHistoryEntry entry, Boss boss, int killCount)
+	{
+		if (session != null)
+		{
+			queueGameMessage("End the current session before resuming the last one");
+			return;
+		}
+
+		BossSession resumed = new BossSession(boss);
+		resumed.setKillsThisSession(entry.getKillsThisSession());
+		resumed.setKillCount(killCount);
+		// Starts the clock where the session left off: the time since it ended doesn't count
+		resumed.setSessionStart(Instant.now());
+		resumed.setLastKillAt(Instant.now());
+		resumed.setTimerOffsetSeconds(entry.getSessionDurationSeconds());
+		resumed.setCumulativeKillTimeSeconds(savedFightSeconds(entry));
+		resumed.setFastestKillSeconds(entry.getFastestKillSeconds());
+		resumed.setOnSlayerTask(entry.isOnSlayerTask());
+		resumed.setPetObtained(entry.isPetObtained());
+		resumed.setTeamDeaths(entry.getTeamDeaths());
+		resumed.setOwnDeaths(entry.getOwnDeaths());
+		resumed.setNotes(entry.getNotes());
+		resumed.setUniqueSplits(Collections.unmodifiableMap(new LinkedHashMap<>(entry.getUniqueSplits())));
+		resumed.setTeammateUniques(Collections.unmodifiableList(new ArrayList<>(entry.getTeammateUniques())));
+		resumed.getTrips().addAll(entry.getTrips());
+		session = resumed;
+
+		// Ending it again adds its whole time to the boss's total, so take off what was added
+		// the first time. Queued before the loot tracker reloads the totals, so it sees this.
+		int savedSeconds = entry.getSessionDurationSeconds();
+		asyncExecutor.execute(() ->
+		{
+			BossStats stats = statsStore.load(accountHash, boss);
+			stats.setTotalTimeActualSeconds(Math.max(0, stats.getTotalTimeActualSeconds() - savedSeconds));
+			statsStore.save(accountHash, boss, stats);
+		});
+		lootTracker.resumeSession(boss, entry);
+		goalManager.ensureLoaded(boss);
+		historyManager.delete(entry);
+
+		recalculateKph();
+		log.debug("Resumed {} session with {} kills", boss, entry.getKillsThisSession());
+		queueGameMessage("Session Resumed: " + boss.getBossName());
+	}
+
+	/**
+	 * A saved session's total fight time. Sessions saved before it was recorded fall back to
+	 * their trips' fight times, then to their length less idle time, which is exact for
+	 * sessions ended in ACTUAL mode.
+	 */
+	static int savedFightSeconds(SessionHistoryEntry entry)
+	{
+		if (entry.getFightSeconds() > 0)
+		{
+			return entry.getFightSeconds();
+		}
+		int tripFightSeconds = 0;
+		for (Trip trip : entry.getTrips())
+		{
+			tripFightSeconds += trip.getFightSeconds();
+		}
+		if (tripFightSeconds > 0)
+		{
+			return tripFightSeconds;
+		}
+		return Math.max(0, entry.getSessionDurationSeconds() - entry.getIdleSeconds());
+	}
+
 	public void announceCurrentInfo()
 	{
 		BossSession toAnnounce = session != null ? session : lastCompletedSession;
@@ -1020,6 +1127,7 @@ public class SessionManager
 		entry.setAverageKillTimeSeconds(endedSession.getAverageKillTimeSeconds());
 		entry.setFastestKillSeconds(endedSession.getFastestKillSeconds());
 		entry.setIdleSeconds(endedSession.getIdleSeconds());
+		entry.setFightSeconds(endedSession.getCumulativeKillTimeSeconds());
 		entry.setOnSlayerTask(endedSession.isOnSlayerTask());
 		entry.setPetObtained(endedSession.isPetObtained());
 		entry.setTeamDeaths(endedSession.getTeamDeaths());

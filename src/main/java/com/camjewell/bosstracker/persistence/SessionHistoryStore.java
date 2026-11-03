@@ -69,6 +69,47 @@ public class SessionHistoryStore
 		return entries;
 	}
 
+	/**
+	 * @return the most recently ended session, or null if there is none. Files are named by
+	 * when the session ended, so only the newest one is read.
+	 */
+	public SessionHistoryEntry loadNewest(long accountHash)
+	{
+		File[] files = historyDir(accountHash).listFiles((FilenameFilter) (dir, name) -> name.endsWith(".json"));
+		if (files == null)
+		{
+			return null;
+		}
+
+		File newest = null;
+		long newestEndedAt = Long.MIN_VALUE;
+		for (File file : files)
+		{
+			long endedAt = endedAt(file);
+			if (endedAt > newestEndedAt)
+			{
+				newest = file;
+				newestEndedAt = endedAt;
+			}
+		}
+		return newest != null ? JsonFiles.read(gson, newest, SessionHistoryEntry.class) : null;
+	}
+
+	/** The end time an entry's file name starts with, or Long.MIN_VALUE for a file not named that way. */
+	private static long endedAt(File file)
+	{
+		String name = file.getName();
+		int underscore = name.indexOf('_');
+		try
+		{
+			return Long.parseLong(underscore > 0 ? name.substring(0, underscore) : "");
+		}
+		catch (NumberFormatException e)
+		{
+			return Long.MIN_VALUE;
+		}
+	}
+
 	public void delete(long accountHash, SessionHistoryEntry entry)
 	{
 		File file = entryFile(accountHash, entry);

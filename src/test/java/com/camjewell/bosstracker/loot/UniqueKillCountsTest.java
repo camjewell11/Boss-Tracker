@@ -4,6 +4,9 @@ import com.camjewell.bosstracker.boss.Boss;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
@@ -81,5 +84,19 @@ public class UniqueKillCountsTest
 
 		assertEquals(Collections.singletonList(34), kcs.byItem().get(ORION));
 		assertEquals(1, kcs.byItem().size());
+	}
+
+	@Test
+	public void aResumedSessionKeepsItsDropsAndAddsNewOnes()
+	{
+		Map<Integer, List<Integer>> saved = new LinkedHashMap<>();
+		saved.put(RONDACHE, Arrays.asList(12, 40));
+		UniqueKillCounts kcs = new UniqueKillCounts();
+		kcs.restoreDrops(Boss.FRACTURED_ARCHIVE, saved);
+		kcs.onKillCount(Boss.FRACTURED_ARCHIVE, 41, T);
+		kcs.onUnique(Boss.FRACTURED_ARCHIVE, ORION, T.plusSeconds(20));
+
+		assertEquals(Arrays.asList(12, 40), kcs.byItem().get(RONDACHE));
+		assertEquals(Collections.singletonList(41), kcs.byItem().get(ORION));
 	}
 }

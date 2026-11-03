@@ -5,10 +5,12 @@ import com.camjewell.bosstracker.persistence.BossLoot;
 import com.camjewell.bosstracker.persistence.BossLootStore;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.BossStatsStore;
+import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
 import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.util.ItemPriceCache;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -149,6 +151,30 @@ public class LootTracker
 		uniqueKillCounts.clearDrops();
 		trackedBoss = null;
 		ensureLoaded(boss);
+	}
+
+	/**
+	 * Called on the client thread when an ended session is resumed: puts its loot back as this
+	 * session's. The all-time totals already include it, so they're only (re)loaded.
+	 */
+	public void resumeSession(Boss boss, SessionHistoryEntry entry)
+	{
+		startNewSession(boss);
+		sessionLoot.putAll(entry.getLootItemQuantities());
+		sessionMinionLoot.putAll(entry.getMinionLootItemQuantities());
+		sessionMinionKills = entry.getMinionKills();
+		sessionPerfectBonusLoot.putAll(entry.getPerfectBonusItemQuantities());
+		sessionPerfectKills = entry.getPerfectKills();
+		sessionDropPrices.putAll(entry.getItemPricesAtDrop());
+		uniqueKillCounts.restoreDrops(boss, entry.getUniqueKillCounts());
+		for (Map<Integer, Integer> loot : Arrays.asList(sessionLoot, sessionMinionLoot, sessionPerfectBonusLoot))
+		{
+			for (int itemId : loot.keySet())
+			{
+				priceCache.warmIfAbsent(itemId);
+			}
+		}
+		version++;
 	}
 
 	/** Called for every kill-count message, so uniques can record the kill they dropped on. */

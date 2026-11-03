@@ -63,6 +63,22 @@ public class UniqueKillCounts
 		drops.clear();
 	}
 
+	/**
+	 * Puts back a resumed session's drops, as {@link #byItem} gave them. They're dated long ago,
+	 * so a kill count arriving now can't be taken for theirs.
+	 */
+	public synchronized void restoreDrops(Boss boss, Map<Integer, List<Integer>> byItem)
+	{
+		drops.clear();
+		byItem.forEach((itemId, killCounts) ->
+		{
+			for (int count : killCounts)
+			{
+				drops.add(new Drop(itemId, boss, Instant.EPOCH, count));
+			}
+		});
+	}
+
 	/** Each unique's kill counts, oldest first. Drops whose count was never seen are left out. */
 	public synchronized Map<Integer, List<Integer>> byItem()
 	{

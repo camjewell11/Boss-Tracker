@@ -25,6 +25,13 @@ public class SessionHistoryEntry
 	private int averageKillTimeSeconds;
 	private int fastestKillSeconds;
 	private int idleSeconds;
+
+	/**
+	 * The session's kill durations added up, without the time between kills. 0 for sessions
+	 * saved before this was recorded.
+	 */
+	private int fightSeconds;
+
 	private boolean onSlayerTask;
 	/** A pet dropped during the session. False for entries saved before this was recorded. */
 	private boolean petObtained;

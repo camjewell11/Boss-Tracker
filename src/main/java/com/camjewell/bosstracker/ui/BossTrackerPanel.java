@@ -160,6 +160,7 @@ public class BossTrackerPanel extends PluginPanel
 
 	private final JButton pauseResumeButton = new JButton("Pause");
 	private final JButton calcModeButton = new JButton("Actual");
+	private final JButton endSessionButton = new JButton("End Session");
 	private final JButton sessionNotesButton = new JButton("Notes");
 
 	private final JPanel goalsPanel = new JPanel(new BorderLayout());
@@ -1288,11 +1289,18 @@ public class BossTrackerPanel extends PluginPanel
 			}
 		});
 
-		JButton endSessionButton = new JButton("End Session");
 		styleButton(endSessionButton);
 		endSessionButton.addActionListener(e ->
 		{
-			sessionManager.end();
+			if (sessionManager.getSession() != null)
+			{
+				sessionManager.end();
+			}
+			else
+			{
+				// Lands a moment later, once the saved session is read back; the tick refresh shows it
+				sessionManager.resumeLastSession();
+			}
 			refresh();
 		});
 
@@ -1300,6 +1308,22 @@ public class BossTrackerPanel extends PluginPanel
 		buttonWrapper.add(endSessionButton);
 		container.add(buttonWrapper, BorderLayout.CENTER);
 		return container;
+	}
+
+	/** With no session running, the button picks the last one back up instead. */
+	private void refreshEndSessionButton(BossSession session)
+	{
+		if (session != null)
+		{
+			endSessionButton.setText("End Session");
+			endSessionButton.setToolTipText("Save this session to History");
+		}
+		else
+		{
+			endSessionButton.setText("Resume Session");
+			endSessionButton.setToolTipText("<html>Carry on the last session you ended, as if it had only been paused."
+				+ "<br>The time since it ended doesn't count. Works while logged in.</html>");
+		}
 	}
 
 	/** Notes go on the running session; an ended one is edited from its History row instead. */
@@ -1920,6 +1944,7 @@ public class BossTrackerPanel extends PluginPanel
 			pauseResumeButton.setText("Pause");
 			calcModeButton.setText("Actual");
 			refreshSessionNotesButton(null);
+			refreshEndSessionButton(null);
 			refreshGoalsPanel(null);
 			refreshLootPanel(null);
 			refreshHistoryPanel();
@@ -1948,6 +1973,7 @@ public class BossTrackerPanel extends PluginPanel
 		pauseResumeButton.setText(session != null && session.isPaused() ? "Resume" : "Pause");
 		calcModeButton.setText(display.getCalcMode() == CalcMode.VIRTUAL ? "Virtual" : "Actual");
 		refreshSessionNotesButton(session);
+		refreshEndSessionButton(session);
 
 		refreshGoalsPanel(display);
 		refreshLootPanel(display);
