@@ -23,6 +23,7 @@ import com.camjewell.bosstracker.session.CalcMode;
 import com.camjewell.bosstracker.session.GoalManager;
 import com.camjewell.bosstracker.util.GpValue;
 import com.camjewell.bosstracker.util.GpFormat;
+import com.camjewell.bosstracker.util.ItemIcons;
 import com.camjewell.bosstracker.util.ItemPriceCache;
 import com.camjewell.bosstracker.session.SessionManager;
 import com.camjewell.bosstracker.util.TimeFormat;
@@ -1748,7 +1749,7 @@ public class BossTrackerPanel extends PluginPanel
 					+ "<br>GP/Item: " + GpFormat.exact(unique.getPrice())
 					+ "<br>" + splitDescription(unique.getSplitSize(), UniqueSplits.share(unique.getPrice(), 1, unique.getSplitSize()))
 					+ "</html>");
-				itemManager.getImage(unique.getItemId()).addTo(itemLabel);
+				addCentredIcon(itemManager.getImage(unique.getItemId()), itemLabel);
 
 				JPopupMenu menu = new JPopupMenu();
 				JMenuItem changeSplit = new JMenuItem("Change Split...");
@@ -1819,6 +1820,14 @@ public class BossTrackerPanel extends PluginPanel
 		return section;
 	}
 
+	/** Shows an item alone in its tile, centred by what's drawn rather than by its canvas. */
+	private static void addCentredIcon(AsyncBufferedImage image, JLabel label)
+	{
+		Runnable apply = () -> label.setIcon(new ImageIcon(ItemIcons.centred(image)));
+		image.onLoaded(apply);
+		apply.run();
+	}
+
 	/**
 	 * Every unique teammates split with the player at a raid, one slot per item, valued as they
 	 * were when added rather than at today's prices.
@@ -1865,7 +1874,14 @@ public class BossTrackerPanel extends PluginPanel
 			itemLabel.setToolTipText("<html>" + notesHtml(first.getItemName()) + " x " + quantity + " (teammates' drops)"
 				+ "<br>Value: " + GpFormat.exact(value)
 				+ "<br>Split GP: " + GpFormat.exact(share) + " (your shares, after tax)</html>");
-			itemManager.getImage(first.getItemId(), quantity, quantity > 1).addTo(itemLabel);
+			if (quantity > 1)
+			{
+				itemManager.getImage(first.getItemId(), quantity, true).addTo(itemLabel);
+			}
+			else
+			{
+				addCentredIcon(itemManager.getImage(first.getItemId()), itemLabel);
+			}
 
 			JPanel slot = new JPanel(new BorderLayout());
 			slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
