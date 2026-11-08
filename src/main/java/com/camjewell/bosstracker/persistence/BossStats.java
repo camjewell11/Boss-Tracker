@@ -1,6 +1,9 @@
 package com.camjewell.bosstracker.persistence;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -34,6 +37,15 @@ public class BossStats
 	private boolean lootGoalNotified;
 
 	/**
+	 * Lifetime loot quantities when the loot goal was set to count from then; null when it counts
+	 * all-time loot, as every goal saved before this choice existed does.
+	 */
+	private Map<Integer, Integer> lootGoalBaseline;
+
+	/** Items to get from the boss as part of its goal. Empty in stats saved before these existed. */
+	private List<ItemGoal> itemGoals = new ArrayList<>();
+
+	/**
 	 * Map regions this boss has been killed in, learned by BossAreaTracker and used to end a trip
 	 * when the player leaves. Empty in stats saved before trips existed.
 	 */
@@ -60,6 +72,11 @@ public class BossStats
 		{
 			lootGoalGp = other.lootGoalGp;
 			lootGoalNotified = other.lootGoalNotified;
+			lootGoalBaseline = other.lootGoalBaseline;
+		}
+		if (itemGoals == null || itemGoals.isEmpty())
+		{
+			itemGoals = other.itemGoals;
 		}
 		regionIds.addAll(other.regionIds);
 	}

@@ -3,6 +3,7 @@ package com.camjewell.bosstracker.ui;
 import com.camjewell.bosstracker.BossTrackerConfig;
 import com.camjewell.bosstracker.BossTrackerConfig.GoalOverlayRow;
 import com.camjewell.bosstracker.loot.LootTracker;
+import com.camjewell.bosstracker.persistence.ItemGoal;
 import com.camjewell.bosstracker.session.BossGoal;
 import com.camjewell.bosstracker.session.BossSession;
 import com.camjewell.bosstracker.session.GoalManager;
@@ -66,9 +67,10 @@ public class BossGoalOverlay extends Overlay
 
 		boolean kcGoalSet = goal != null && goal.isSet();
 		boolean lootGoalSet = goal != null && goal.isLootGoalSet();
+		boolean itemGoalsSet = goal != null && !goal.getItemGoals().isEmpty();
 
 		if (!config.displayBossGoalsOverlay() || session == null || goal == null
-			|| goal.getBoss() != session.getBoss() || (!kcGoalSet && !lootGoalSet))
+			|| goal.getBoss() != session.getBoss() || (!kcGoalSet && !lootGoalSet && !itemGoalsSet))
 		{
 			return null;
 		}
@@ -77,7 +79,7 @@ public class BossGoalOverlay extends Overlay
 		int killsDone = goal.killsDone(currentKc);
 		int totalToGet = goal.totalKillsToGet();
 		int killsLeft = Math.max(0, totalToGet - killsDone);
-		long currentGp = computeCurrentLifetimeGp();
+		long currentGp = lootGoalSet ? computeLootGoalProgressGp(goal) : 0;
 		long lootGoalGp = goal.getLootGoalGp();
 
 		boolean complete = kcGoalSet ? goal.isComplete(currentKc) : goal.isLootGoalComplete(currentGp);
@@ -147,30 +149,42 @@ public class BossGoalOverlay extends Overlay
 		}
 
 		panelComponent.getChildren().add(iconAndLines);
-		panelComponent.getChildren().add(progressBarComponent);
+		if (kcGoalSet || lootGoalSet)
+		{
+			panelComponent.getChildren().add(progressBarComponent);
+		}
+
+		Map<Integer, Integer> lifetimeLoot = lootTracker.getLifetimeLoot();
+		for (ItemGoal item : goal.getItemGoals())
+		{
+			panelComponent.getChildren().add(LineComponent.builder()
+				.left(item.getItemName() + ":")
+				.right(Math.min(item.obtained(lifetimeLoot), item.getQuantity()) + "/" + item.getQuantity())
+				.rightColor(item.isComplete(lifetimeLoot) ? PROGRESS_COLOR : Color.WHITE)
+				.build());
+		}
 
 		return panelComponent.render(graphics);
 	}
 
-	/** The lifetime loot total, recomputed only when the loot changes rather than every frame. */
-	private long cachedLifetimeGp;
-	private int cachedLifetimeGpVersion = -1;
+	/**
+	 * The loot counting toward the goal, recomputed only when the loot or the goal's starting
+	 * point changes rather than every frame.
+	 */
+	private long cachedLootGoalGp;
+	private int cachedLootGoalGpVersion = -1;
+	private Map<Integer, Integer> cachedLootGoalBaseline;
 
-	private long computeCurrentLifetimeGp()
+	private long computeLootGoalProgressGp(BossGoal goal)
 	{
-		if (lootTracker.getVersion() == cachedLifetimeGpVersion)
+		if (lootTracker.getVersion() == cachedLootGoalGpVersion && goal.getLootGoalBaseline() == cachedLootGoalBaseline)
 		{
-			return cachedLifetimeGp;
+			return cachedLootGoalGp;
 		}
-		cachedLifetimeGpVersion = lootTracker.getVersion();
-
-		long total = 0;
-		for (Map.Entry<Integer, Integer> entry : lootTracker.getLifetimeLoot().entrySet())
-		{
-			total += priceCache.getPrice(entry.getKey()) * entry.getValue();
-		}
-		cachedLifetimeGp = total;
-		return total;
+		cachedLootGoalGpVersion = lootTracker.getVersion();
+		cachedLootGoalBaseline = goal.getLootGoalBaseline();
+		cachedLootGoalGp = goal.lootProgressGp(lootTracker.getLifetimeLoot(), priceCache::getPrice);
+		return cachedLootGoalGp;
 	}
 
 	private LineComponent rowFor(GoalOverlayRow row, int killsDone, int killsLeft, boolean kcGoalSet, double ttgHours,

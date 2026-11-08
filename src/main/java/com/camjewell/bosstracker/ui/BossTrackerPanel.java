@@ -7,12 +7,14 @@ import com.camjewell.bosstracker.history.DryStreak;
 import com.camjewell.bosstracker.history.ItemDropSearch;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.lookup.BossLookupManager;
+import com.camjewell.bosstracker.loot.DropTables;
 import com.camjewell.bosstracker.loot.LootBossMatcher;
 import com.camjewell.bosstracker.loot.NotableDrops;
 import com.camjewell.bosstracker.loot.PerfectKillLoot;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.loot.UniqueSplits;
 import com.camjewell.bosstracker.persistence.BossStats;
+import com.camjewell.bosstracker.persistence.ItemGoal;
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
 import com.camjewell.bosstracker.persistence.TeammateUnique;
 import com.camjewell.bosstracker.persistence.Trip;
@@ -66,6 +68,7 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
 import javax.swing.JComboBox;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
@@ -83,6 +86,7 @@ import javax.swing.JSpinner;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
+import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
@@ -91,6 +95,8 @@ import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
 import javax.swing.border.MatteBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.plaf.basic.BasicComboPopup;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import net.runelite.api.Skill;
@@ -145,6 +151,7 @@ public class BossTrackerPanel extends PluginPanel
 	private final BossTrackerConfig config;
 	private final ItemManager itemManager;
 	private final ItemPriceCache priceCache;
+	private final DropTables dropTables;
 	private final BufferedImage slayerIcon;
 
 	private final JLabel bossIconLabel = new JLabel();
@@ -174,6 +181,8 @@ public class BossTrackerPanel extends PluginPanel
 	private final JLabel goalKillsLeftLabel = new JLabel(htmlLabel("Kills Left: ", "N/A"));
 	private final ProgressBar goalProgressBar = new ProgressBar();
 	private final JLabel goalLootLabel = new JLabel(htmlLabel("Loot Goal: ", "N/A"));
+	/** One label per item goal, below the loot goal. */
+	private final JPanel goalItemsPanel = new JPanel(new GridLayout(0, 1));
 	private final SpinnerNumberModel goalStartKcModel = new SpinnerNumberModel(0, 0, 10_000_000, 1);
 	private final SpinnerNumberModel goalEndKcModel = new SpinnerNumberModel(0, 0, 10_000_000, 5);
 
@@ -274,7 +283,7 @@ public class BossTrackerPanel extends PluginPanel
 	@Inject
 	public BossTrackerPanel(SessionManager sessionManager, GoalManager goalManager, LootTracker lootTracker,
 		SessionHistoryManager historyManager, BossLookupManager lookupManager, BossTrackerConfig config,
-		ItemManager itemManager, ItemPriceCache priceCache, SkillIconManager skillIconManager)
+		ItemManager itemManager, ItemPriceCache priceCache, SkillIconManager skillIconManager, DropTables dropTables)
 	{
 		this.sessionManager = sessionManager;
 		this.goalManager = goalManager;
@@ -284,6 +293,7 @@ public class BossTrackerPanel extends PluginPanel
 		this.config = config;
 		this.itemManager = itemManager;
 		this.priceCache = priceCache;
+		this.dropTables = dropTables;
 		this.slayerIcon = skillIconManager.getSkillImage(Skill.SLAYER, true);
 
 		setLayout(new BorderLayout());
@@ -676,6 +686,8 @@ public class BossTrackerPanel extends PluginPanel
 		southPanel.setOpaque(false);
 		southPanel.add(progressBarPanel);
 		southPanel.add(goalLootLabelWrapper);
+		goalItemsPanel.setOpaque(false);
+		southPanel.add(goalItemsPanel);
 
 		goalsPanel.add(iconPanel, BorderLayout.WEST);
 		goalsPanel.add(kphTtgPanel, BorderLayout.CENTER);
@@ -705,6 +717,18 @@ public class BossTrackerPanel extends PluginPanel
 		// Text rather than a spinner, so "50m" works: a spinner silently drops anything it can't
 		// parse, and also a typed value that was never committed, leaving the goal at 0.
 		JTextField lootGpField = new JTextField(goal.isLootGoalSet() ? GpFormat.shorthand(goal.getLootGoalGp()) : "");
+		// New loot and item goals count from now; existing ones keep the choice they were set with.
+		boolean fromNow = (!goal.isLootGoalSet() && goal.getItemGoals().isEmpty()) || goal.isLootGoalFromNow();
+		JRadioButton lootFromNowButton = new JRadioButton("From now", fromNow);
+		JRadioButton lootAllTimeButton = new JRadioButton("All time", !fromNow);
+		lootFromNowButton.setToolTipText("Count only loot that drops after the goal is set; an item added later counts from then");
+		lootAllTimeButton.setToolTipText("Count all of this boss's tracked loot, including earlier sessions");
+		ButtonGroup lootCountGroup = new ButtonGroup();
+		lootCountGroup.add(lootFromNowButton);
+		lootCountGroup.add(lootAllTimeButton);
+		JPanel lootCountPanel = new JPanel(new GridLayout(1, 2));
+		lootCountPanel.add(lootFromNowButton);
+		lootCountPanel.add(lootAllTimeButton);
 
 		JPanel inputPanel = new JPanel(new GridLayout(0, 2, 5, 5));
 		inputPanel.add(new JLabel("Start KC:"));
@@ -713,11 +737,69 @@ public class BossTrackerPanel extends PluginPanel
 		inputPanel.add(endSpinner);
 		inputPanel.add(new JLabel("Loot Goal, e.g. 50m:"));
 		inputPanel.add(lootGpField);
+		inputPanel.add(new JLabel("Count drops:"));
+		inputPanel.add(lootCountPanel);
+
+		DefaultListModel<ItemGoal> itemGoalsModel = new DefaultListModel<>();
+		goal.getItemGoals().forEach(itemGoalsModel::addElement);
+		JList<ItemGoal> itemGoalsList = new JList<>(itemGoalsModel);
+		itemGoalsList.setVisibleRowCount(4);
+		itemGoalsList.setCellRenderer(new DefaultListCellRenderer()
+		{
+			@Override
+			public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+				boolean isSelected, boolean cellHasFocus)
+			{
+				ItemGoal item = (ItemGoal) value;
+				return super.getListCellRendererComponent(list, item.getQuantity() + " x " + item.getItemName(), index, isSelected, cellHasFocus);
+			}
+		});
+
+		JPanel dialogPanel = new JPanel(new BorderLayout(0, 10));
+		JButton addItemButton = new JButton("Add Item");
+		addItemButton.addActionListener(e ->
+		{
+			ItemGoal added = askItemGoal(dialogPanel, goal.getBoss());
+			if (added == null)
+			{
+				return;
+			}
+			// Adding an item that's already listed changes its quantity.
+			for (int i = 0; i < itemGoalsModel.size(); i++)
+			{
+				if (itemGoalsModel.get(i).getItemName().equals(added.getItemName()))
+				{
+					itemGoalsModel.set(i, added);
+					return;
+				}
+			}
+			itemGoalsModel.addElement(added);
+		});
+		JButton removeItemButton = new JButton("Remove");
+		removeItemButton.addActionListener(e ->
+		{
+			int selected = itemGoalsList.getSelectedIndex();
+			if (selected >= 0)
+			{
+				itemGoalsModel.remove(selected);
+			}
+		});
+		JPanel itemButtons = new JPanel(new GridLayout(1, 2, 5, 0));
+		itemButtons.add(addItemButton);
+		itemButtons.add(removeItemButton);
+
+		JPanel itemGoalsPanel = new JPanel(new BorderLayout(0, 5));
+		itemGoalsPanel.add(new JLabel("Item Goals, e.g. 3 x Venator shard:"), BorderLayout.NORTH);
+		itemGoalsPanel.add(new JScrollPane(itemGoalsList), BorderLayout.CENTER);
+		itemGoalsPanel.add(itemButtons, BorderLayout.SOUTH);
+
+		dialogPanel.add(inputPanel, BorderLayout.NORTH);
+		dialogPanel.add(itemGoalsPanel, BorderLayout.CENTER);
 
 		String title = "Set Boss Goal (" + goal.getBoss().getBossName() + ")";
 		while (true)
 		{
-			int option = JOptionPane.showConfirmDialog(null, inputPanel, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+			int option = JOptionPane.showConfirmDialog(null, dialogPanel, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 			if (option != JOptionPane.OK_OPTION)
 			{
 				return;
@@ -735,10 +817,126 @@ public class BossTrackerPanel extends PluginPanel
 			commitSpinner(startSpinner);
 			commitSpinner(endSpinner);
 			goalManager.setGoal((int) goalStartKcModel.getValue(), (int) goalEndKcModel.getValue());
-			goalManager.setLootGoal(lootGoalGp);
+			goalManager.setDropGoals(lootGoalGp, Collections.list(itemGoalsModel.elements()), lootFromNowButton.isSelected(),
+				lootTracker.getLifetimeLoot());
 			refresh();
 			return;
 		}
+	}
+
+	/**
+	 * Asks for one of the boss's drops and how many of it to get, or null if cancelled. Typing
+	 * filters the list to matching names.
+	 */
+	private ItemGoal askItemGoal(Component parent, Boss boss)
+	{
+		Map<String, List<Integer>> options = itemGoalOptions(boss);
+		List<String> names = new ArrayList<>(options.keySet());
+		names.sort(String.CASE_INSENSITIVE_ORDER);
+
+		DefaultListModel<String> shown = new DefaultListModel<>();
+		names.forEach(shown::addElement);
+		JList<String> list = new JList<>(shown);
+		list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		list.setVisibleRowCount(10);
+
+		JTextField filterField = new JTextField(18);
+		filterField.getDocument().addDocumentListener(new DocumentListener()
+		{
+			private void filter()
+			{
+				String query = filterField.getText().trim().toLowerCase();
+				shown.clear();
+				for (String name : names)
+				{
+					if (name.toLowerCase().contains(query))
+					{
+						shown.addElement(name);
+					}
+				}
+				if (!shown.isEmpty())
+				{
+					list.setSelectedIndex(0);
+				}
+			}
+
+			@Override
+			public void insertUpdate(DocumentEvent e)
+			{
+				filter();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent e)
+			{
+				filter();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e)
+			{
+				filter();
+			}
+		});
+
+		SpinnerNumberModel quantityModel = new SpinnerNumberModel(1, 1, 1_000_000, 1);
+		JSpinner quantitySpinner = new JSpinner(quantityModel);
+
+		JPanel searchPanel = new JPanel(new GridLayout(0, 1, 0, 4));
+		searchPanel.add(new JLabel("Search " + boss.getBossName() + "'s drops, e.g. Venator shard"));
+		searchPanel.add(filterField);
+		JPanel quantityPanel = new JPanel(new GridLayout(0, 1, 0, 4));
+		quantityPanel.add(new JLabel("How many to get"));
+		quantityPanel.add(quantitySpinner);
+		JPanel panel = new JPanel(new BorderLayout(0, 5));
+		panel.add(searchPanel, BorderLayout.NORTH);
+		panel.add(new JScrollPane(list), BorderLayout.CENTER);
+		panel.add(quantityPanel, BorderLayout.SOUTH);
+
+		String title = "Add Item Goal (" + boss.getBossName() + ")";
+		while (true)
+		{
+			SwingUtilities.invokeLater(filterField::requestFocusInWindow);
+			int option = JOptionPane.showConfirmDialog(parent, panel, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+			if (option != JOptionPane.OK_OPTION)
+			{
+				return null;
+			}
+
+			String selected = list.getSelectedValue();
+			if (selected == null)
+			{
+				JOptionPane.showMessageDialog(parent, "Pick an item from the list.", title, JOptionPane.WARNING_MESSAGE);
+				continue;
+			}
+			commitSpinner(quantitySpinner);
+			return new ItemGoal(selected, options.get(selected), quantityModel.getNumber().intValue());
+		}
+	}
+
+	/**
+	 * What an item goal can name for the boss: its drop table, untradeables included, plus anything
+	 * else it has dropped for the player. An item already had also counts the IDs it was had as,
+	 * such as its noted version.
+	 */
+	private Map<String, List<Integer>> itemGoalOptions(Boss boss)
+	{
+		Map<String, List<Integer>> options = new LinkedHashMap<>();
+		dropTables.drops(boss).forEach((name, ids) -> options.put(name, new ArrayList<>(ids)));
+		for (int itemId : lootTracker.getLifetimeLoot().keySet())
+		{
+			if (!priceCache.hasName(itemId))
+			{
+				continue;
+			}
+			String name = priceCache.getName(itemId);
+			List<Integer> ids = options.computeIfAbsent(name, n -> new ArrayList<>());
+			if (!ids.contains(itemId))
+			{
+				ids.add(itemId);
+			}
+		}
+		return options;
 	}
 
 	/** Takes a number typed into the spinner but not yet entered, rather than its last value. */
@@ -767,6 +965,7 @@ public class BossTrackerPanel extends PluginPanel
 		boolean hasGoal = goalForDisplayedBoss && goal.isSet();
 
 		refreshLootGoalLabel(goalForDisplayedBoss ? goal : null);
+		refreshItemGoalLabels(goalForDisplayedBoss ? goal : null);
 
 		if (!hasGoal)
 		{
@@ -820,21 +1019,52 @@ public class BossTrackerPanel extends PluginPanel
 		}
 	}
 
+	/** One line per item goal, such as "Venator shard: 1 / 3", reusing the labels already there. */
+	private void refreshItemGoalLabels(BossGoal goal)
+	{
+		List<ItemGoal> items = goal != null ? goal.getItemGoals() : Collections.emptyList();
+		int shown = goalItemsPanel.getComponentCount();
+		while (goalItemsPanel.getComponentCount() > items.size())
+		{
+			goalItemsPanel.remove(goalItemsPanel.getComponentCount() - 1);
+		}
+		while (goalItemsPanel.getComponentCount() < items.size())
+		{
+			JLabel label = new JLabel();
+			label.setBorder(new EmptyBorder(0, 5, 7, 5));
+			goalItemsPanel.add(label);
+		}
+		if (goalItemsPanel.getComponentCount() != shown)
+		{
+			goalItemsPanel.revalidate();
+		}
+
+		Map<Integer, Integer> lifetimeLoot = lootTracker.getLifetimeLoot();
+		for (int i = 0; i < items.size(); i++)
+		{
+			ItemGoal item = items.get(i);
+			boolean complete = item.isComplete(lifetimeLoot);
+			JLabel label = (JLabel) goalItemsPanel.getComponent(i);
+			label.setText(htmlLabel(item.getItemName() + ": ", Math.min(item.obtained(lifetimeLoot), item.getQuantity())
+				+ " / " + item.getQuantity() + (complete ? " (done)" : "")));
+			label.setToolTipText(goal.isLootGoalFromNow() ? "Counting drops since this item was added to the goal" : "Counting all-time drops");
+		}
+	}
+
 	private void refreshLootGoalLabel(BossGoal goal)
 	{
 		if (goal == null || !goal.isLootGoalSet())
 		{
 			goalLootLabel.setText(htmlLabel("Loot Goal: ", "N/A"));
+			goalLootLabel.setToolTipText(null);
 			return;
 		}
 
-		long currentGp = 0;
-		for (Map.Entry<Integer, Integer> entry : lootTracker.getLifetimeLoot().entrySet())
-		{
-			currentGp += priceCache.getPrice(entry.getKey()) * entry.getValue();
-		}
-
-		goalLootLabel.setText(htmlLabel("Loot Goal: ", GpFormat.paired(currentGp, goal.getLootGoalGp()) + " / " + GpFormat.paired(goal.getLootGoalGp(), currentGp) + " gp"));
+		long currentGp = goal.lootProgressGp(lootTracker.getLifetimeLoot(), priceCache::getPrice);
+		long goalGp = goal.getLootGoalGp();
+		goalLootLabel.setText(htmlLabel("Loot Goal: ", GpFormat.paired(currentGp, goalGp) + " / " + GpFormat.paired(goalGp, currentGp) + " gp"));
+		goalLootLabel.setToolTipText(GpFormat.exact(currentGp) + " / " + GpFormat.exact(goalGp) + " gp, counting "
+			+ (goal.isLootGoalFromNow() ? "loot since the goal was set" : "all-time loot"));
 	}
 
 	private JPanel buildLootPanel()

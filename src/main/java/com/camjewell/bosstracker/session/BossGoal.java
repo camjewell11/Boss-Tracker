@@ -1,6 +1,11 @@
 package com.camjewell.bosstracker.session;
 
 import com.camjewell.bosstracker.boss.Boss;
+import com.camjewell.bosstracker.persistence.ItemGoal;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.function.IntToLongFunction;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -25,6 +30,19 @@ public class BossGoal
 	 */
 	private long lootGoalGp;
 	private boolean lootGoalNotified;
+
+	/**
+	 * The boss's lifetime loot quantities when the loot or item goals were set to count from then,
+	 * or null when they count all-time loot. Quantities rather than a GP total, so price changes
+	 * alone don't move the progress.
+	 */
+	private Map<Integer, Integer> lootGoalBaseline;
+
+	/**
+	 * Items to get from the boss. Replaced as a whole rather than edited in place, as it's read on
+	 * the client thread while the panel sets it.
+	 */
+	private List<ItemGoal> itemGoals = Collections.emptyList();
 
 	public BossGoal(Boss boss)
 	{
@@ -65,5 +83,32 @@ public class BossGoal
 	public boolean isLootGoalComplete(long currentGp)
 	{
 		return isLootGoalSet() && currentGp >= lootGoalGp;
+	}
+
+	public boolean isLootGoalFromNow()
+	{
+		return lootGoalBaseline != null;
+	}
+
+	/**
+	 * The loot that counts toward the loot goal, at current prices: all of {@code lifetimeLoot},
+	 * or only what dropped after the baseline was taken.
+	 */
+	public long lootProgressGp(Map<Integer, Integer> lifetimeLoot, IntToLongFunction unitPrice)
+	{
+		long total = 0;
+		for (Map.Entry<Integer, Integer> entry : lifetimeLoot.entrySet())
+		{
+			int quantity = entry.getValue();
+			if (lootGoalBaseline != null)
+			{
+				quantity -= lootGoalBaseline.getOrDefault(entry.getKey(), 0);
+			}
+			if (quantity > 0)
+			{
+				total += unitPrice.applyAsLong(entry.getKey()) * quantity;
+			}
+		}
+		return total;
 	}
 }

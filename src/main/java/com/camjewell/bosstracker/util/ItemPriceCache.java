@@ -63,6 +63,12 @@ public class ItemPriceCache
 		return names.getOrDefault(itemId, "Unknown item");
 	}
 
+	/** Whether the item's name has been warmed, so {@link #getName} returns it. */
+	public boolean hasName(int itemId)
+	{
+		return names.containsKey(itemId);
+	}
+
 	/** Whether the item can be traded; false until it's been warmed. */
 	public boolean isTradeable(int itemId)
 	{

@@ -329,7 +329,7 @@ public class LootTracker
 
 		version++;
 
-		goalManager.onLootValueChanged(sessionBoss, computeLifetimeGp());
+		goalManager.onLootChanged(sessionBoss, lifetimeLoot);
 		persistLoot(sessionBoss, bossItems);
 		return bossItems;
 	}
@@ -384,17 +384,8 @@ public class LootTracker
 		lifetimeLoot.merge(petItemId, 1, Integer::sum);
 		uniqueKillCounts.onUnique(boss, petItemId, Instant.now());
 		version++;
+		goalManager.onLootChanged(boss, lifetimeLoot);
 		persistLoot(boss, Collections.singletonList(new ItemStack(petItemId, 1)));
-	}
-
-	private long computeLifetimeGp()
-	{
-		long total = 0;
-		for (Map.Entry<Integer, Integer> entry : lifetimeLoot.entrySet())
-		{
-			total += priceCache.getPrice(entry.getKey()) * entry.getValue();
-		}
-		return total;
 	}
 
 	/**
