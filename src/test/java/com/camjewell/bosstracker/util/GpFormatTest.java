@@ -30,6 +30,21 @@ public class GpFormatTest
 	}
 
 	@Test
+	public void pairedKeepsDigitsWhileBothAreUnderTenMillion()
+	{
+		assertEquals("950,000", GpFormat.paired(950_000, 9_999_999));
+		assertEquals("9,999,999", GpFormat.paired(9_999_999, 950_000));
+	}
+
+	@Test
+	public void pairedAbbreviatesBothSidesOnceEitherReachesTenMillion()
+	{
+		assertEquals("47.49m", GpFormat.paired(47_494_169, 41_000_000));
+		assertEquals("41.00m", GpFormat.paired(41_000_000, 47_494_169));
+		assertEquals("950.00k", GpFormat.paired(950_000, 10_000_000));
+	}
+
+	@Test
 	public void shorthandWritesTiersAsTheyAreTyped()
 	{
 		assertEquals("3m", GpFormat.shorthand(GpValue.parse("3000000")));

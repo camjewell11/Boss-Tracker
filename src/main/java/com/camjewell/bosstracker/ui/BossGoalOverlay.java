@@ -142,8 +142,8 @@ public class BossGoalOverlay extends Overlay
 		}
 		else
 		{
-			progressBarComponent.setLeftLabel(GpFormat.compact(currentGp));
-			progressBarComponent.setRightLabel(GpFormat.compact(lootGoalGp));
+			progressBarComponent.setLeftLabel(GpFormat.paired(currentGp, lootGoalGp));
+			progressBarComponent.setRightLabel(GpFormat.paired(lootGoalGp, currentGp));
 		}
 
 		panelComponent.getChildren().add(iconAndLines);

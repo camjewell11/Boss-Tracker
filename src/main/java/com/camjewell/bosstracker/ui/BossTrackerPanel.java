@@ -834,7 +834,7 @@ public class BossTrackerPanel extends PluginPanel
 			currentGp += priceCache.getPrice(entry.getKey()) * entry.getValue();
 		}
 
-		goalLootLabel.setText(htmlLabel("Loot Goal: ", GpFormat.compact(currentGp) + " / " + GpFormat.compact(goal.getLootGoalGp()) + " gp"));
+		goalLootLabel.setText(htmlLabel("Loot Goal: ", GpFormat.paired(currentGp, goal.getLootGoalGp()) + " / " + GpFormat.paired(goal.getLootGoalGp(), currentGp) + " gp"));
 	}
 
 	private JPanel buildLootPanel()

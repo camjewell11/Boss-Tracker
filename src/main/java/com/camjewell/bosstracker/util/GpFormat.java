@@ -61,6 +61,22 @@ public final class GpFormat
 		return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
 	}
 
+	/** From here, {@link #paired} abbreviates: two eight-digit amounts side by side overflow. */
+	private static final double PAIRED_ABBREVIATE_FROM = 10_000_000D;
+
+	/**
+	 * An amount shown beside another, as a loot goal's progress and target are: exact digits while
+	 * both are under 10m, abbreviated from there. Both sides switch together so they read alike.
+	 */
+	public static String paired(double value, double other)
+	{
+		if (Math.max(Math.abs(value), Math.abs(other)) >= PAIRED_ABBREVIATE_FROM)
+		{
+			return abbreviated(value);
+		}
+		return compact(value);
+	}
+
 	/** Always abbreviated past a thousand: "950", "12.50k", "3.20m", "1.23b". */
 	public static String abbreviated(double value)
 	{
