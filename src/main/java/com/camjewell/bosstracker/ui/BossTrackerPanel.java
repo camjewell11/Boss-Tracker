@@ -203,6 +203,7 @@ public class BossTrackerPanel extends PluginPanel
 	private final JPanel lootGridPanel = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
 	private final ExtraLootSection minionSection = new ExtraLootSection();
 	private final ExtraLootSection perfectBonusSection = new ExtraLootSection();
+	private final ExtraLootSection cacheSection = new ExtraLootSection();
 	private int lastRenderedLootVersion = -1;
 	private boolean lastRenderedLootAllTime;
 	private boolean lastRenderedLootShowIgnored;
@@ -818,7 +819,7 @@ public class BossTrackerPanel extends PluginPanel
 			commitSpinner(endSpinner);
 			goalManager.setGoal((int) goalStartKcModel.getValue(), (int) goalEndKcModel.getValue());
 			goalManager.setDropGoals(lootGoalGp, Collections.list(itemGoalsModel.elements()), lootFromNowButton.isSelected(),
-				lootTracker.getLifetimeLoot());
+				lootTracker.getGoalLoot());
 			refresh();
 			return;
 		}
@@ -923,7 +924,7 @@ public class BossTrackerPanel extends PluginPanel
 	{
 		Map<String, List<Integer>> options = new LinkedHashMap<>();
 		dropTables.drops(boss).forEach((name, ids) -> options.put(name, new ArrayList<>(ids)));
-		for (int itemId : lootTracker.getLifetimeLoot().keySet())
+		for (int itemId : lootTracker.getGoalLoot().keySet())
 		{
 			if (!priceCache.hasName(itemId))
 			{
@@ -1039,13 +1040,13 @@ public class BossTrackerPanel extends PluginPanel
 			goalItemsPanel.revalidate();
 		}
 
-		Map<Integer, Integer> lifetimeLoot = lootTracker.getLifetimeLoot();
+		Map<Integer, Integer> goalLoot = lootTracker.getGoalLoot();
 		for (int i = 0; i < items.size(); i++)
 		{
 			ItemGoal item = items.get(i);
-			boolean complete = item.isComplete(lifetimeLoot);
+			boolean complete = item.isComplete(goalLoot);
 			JLabel label = (JLabel) goalItemsPanel.getComponent(i);
-			label.setText(htmlLabel(item.getItemName() + ": ", Math.min(item.obtained(lifetimeLoot), item.getQuantity())
+			label.setText(htmlLabel(item.getItemName() + ": ", Math.min(item.obtained(goalLoot), item.getQuantity())
 				+ " / " + item.getQuantity() + (complete ? " (done)" : "")));
 			label.setToolTipText(goal.isLootGoalFromNow() ? "Counting drops since this item was added to the goal" : "Counting all-time drops");
 		}
@@ -1060,7 +1061,7 @@ public class BossTrackerPanel extends PluginPanel
 			return;
 		}
 
-		long currentGp = goal.lootProgressGp(lootTracker.getLifetimeLoot(), priceCache::getPrice);
+		long currentGp = goal.lootProgressGp(lootTracker.getGoalLoot(), priceCache::getPrice);
 		long goalGp = goal.getLootGoalGp();
 		goalLootLabel.setText(htmlLabel("Loot Goal: ", GpFormat.paired(currentGp, goalGp) + " / " + GpFormat.paired(goalGp, currentGp) + " gp"));
 		goalLootLabel.setToolTipText(GpFormat.exact(currentGp) + " / " + GpFormat.exact(goalGp) + " gp, counting "
@@ -1088,6 +1089,7 @@ public class BossTrackerPanel extends PluginPanel
 			lootGridPanel.setVisible(!lootCollapseButton.isSelected());
 			minionSection.grid.setVisible(!lootCollapseButton.isSelected());
 			perfectBonusSection.grid.setVisible(!lootCollapseButton.isSelected());
+			cacheSection.grid.setVisible(!lootCollapseButton.isSelected());
 			sessionViewPanel.revalidate();
 			sessionViewPanel.repaint();
 		});
@@ -1132,12 +1134,18 @@ public class BossTrackerPanel extends PluginPanel
 		lootGridPanel.setOpaque(false);
 		lootGridPanel.setBorder(new EmptyBorder(10, 2, 8, 2));
 
-		// Minion drops (God Wars bodyguards) and perfect-kill bonus loot (Desert Treasure II
-		// bosses) sit under the boss's own loot, each hidden for bosses it doesn't apply to.
+		// Minion drops (God Wars bodyguards), perfect-kill bonus loot (Desert Treasure II bosses)
+		// and opened caches (a Frozen cache) sit under the boss's own loot, each hidden for
+		// bosses it doesn't apply to.
 		JPanel extraSections = new JPanel(new BorderLayout());
 		extraSections.setOpaque(false);
-		extraSections.add(minionSection.panel, BorderLayout.NORTH);
-		extraSections.add(perfectBonusSection.panel, BorderLayout.CENTER);
+		JPanel extraLootSections = new JPanel();
+		extraLootSections.setLayout(new BoxLayout(extraLootSections, BoxLayout.Y_AXIS));
+		extraLootSections.setOpaque(false);
+		extraLootSections.add(minionSection.panel);
+		extraLootSections.add(perfectBonusSection.panel);
+		extraLootSections.add(cacheSection.panel);
+		extraSections.add(extraLootSections, BorderLayout.NORTH);
 		liveTeammateHolder.setOpaque(false);
 		liveTeammateHolder.setBorder(new EmptyBorder(0, 5, 8, 2));
 		liveTeammateHolder.setVisible(false);
@@ -1165,6 +1173,7 @@ public class BossTrackerPanel extends PluginPanel
 				lootGridPanel.repaint();
 				minionSection.panel.setVisible(false);
 				perfectBonusSection.panel.setVisible(false);
+				cacheSection.panel.setVisible(false);
 				lastRenderedLootBoss = null;
 				lastRenderedLootVersion = -1;
 			}
@@ -1230,10 +1239,13 @@ public class BossTrackerPanel extends PluginPanel
 		refreshExtraSection(perfectBonusSection, PerfectKillLoot.hasPerfectKillBonus(boss), "Perfect Kill Bonus", "Perfect Kills",
 			allTime ? lootTracker.getLifetimePerfectBonusLoot() : lootTracker.getSessionPerfectBonusLoot(),
 			allTime ? lootTracker.getLifetimePerfectKills() : lootTracker.getSessionPerfectKills(), showIgnored);
+		refreshExtraSection(cacheSection, LootBossMatcher.hasContainers(boss), "Cache Loot", "Caches Opened",
+			allTime ? lootTracker.getLifetimeCacheLoot() : lootTracker.getSessionCacheLoot(),
+			allTime ? lootTracker.getLifetimeCachesOpened() : lootTracker.getSessionCachesOpened(), showIgnored);
 	}
 
 	/**
-	 * A loot section under the boss's own (minion drops, perfect-kill bonus): a title, then its
+	 * A loot section under the boss's own (minion drops, perfect-kill bonus, cache loot): a title, then its
 	 * kill count and total value laid out like the main loot stats, then its grid. Follows the
 	 * same session/all-time toggle, and is hidden for bosses it doesn't apply to and until its
 	 * first drop.
@@ -3651,6 +3663,12 @@ public class BossTrackerPanel extends PluginPanel
 			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
 			detailPanel.add(buildHistoryExtraSection(entry, entry.getPerfectBonusItemQuantities(),
 				"Perfect Kills", entry.getPerfectKills(), "Bonus GP"));
+		}
+		if (entry.getCacheLootItemQuantities() != null && !entry.getCacheLootItemQuantities().isEmpty())
+		{
+			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+			detailPanel.add(buildHistoryExtraSection(entry, entry.getCacheLootItemQuantities(),
+				"Caches Opened", entry.getCachesOpened(), "Cache GP"));
 		}
 		if (raid)
 		{

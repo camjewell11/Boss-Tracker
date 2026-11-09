@@ -35,6 +35,15 @@ public class BossLoot
 	private Map<Integer, Integer> perfectBonusItemQuantities = new HashMap<>();
 	private int perfectKills;
 
+	/**
+	 * What was inside the boss's containers once opened (a Frozen cache, a Cache of runes), kept
+	 * apart from its drops; see LootBossMatcher#containerOwners. Empty for older files.
+	 */
+	private Map<Integer, Integer> cacheItemQuantities = new HashMap<>();
+
+	/** One per container opened. */
+	private int cachesOpened;
+
 	/** Folds another boss's loot into this one, for bosses that were merged. */
 	public void mergeFrom(BossLoot other)
 	{
@@ -44,5 +53,7 @@ public class BossLoot
 		minionKills += other.minionKills;
 		other.perfectBonusItemQuantities.forEach((id, qty) -> perfectBonusItemQuantities.merge(id, qty, Integer::sum));
 		perfectKills += other.perfectKills;
+		other.cacheItemQuantities.forEach((id, qty) -> cacheItemQuantities.merge(id, qty, Integer::sum));
+		cachesOpened += other.cachesOpened;
 	}
 }

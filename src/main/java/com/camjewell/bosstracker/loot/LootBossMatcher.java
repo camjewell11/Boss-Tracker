@@ -4,7 +4,9 @@ import com.camjewell.bosstracker.boss.Boss;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -72,6 +74,49 @@ public final class LootBossMatcher
 		MINIONS.put(Boss.COMMANDER_ZILYANA, Arrays.asList("Starlight", "Growler", "Bree"));
 		MINIONS.put(Boss.KREEARRA, Arrays.asList("Wingman Skree", "Flockleader Geerin", "Flight Kilisa"));
 		MINIONS.put(Boss.KRIL_TSUTSAROTH, Arrays.asList("Tstanon Karlak", "Zakl'n Gritch", "Balfrug Kreeyath"));
+	}
+
+	/**
+	 * Drops that are opened for more loot. RuneLite reports what's inside as an event named after
+	 * the item (it reads the name from the item, so these match the wiki's item names), whenever
+	 * it's opened: often at the bank, after the session that dropped it has ended. The Cache of
+	 * runes comes from the Tombs of Amascut chest at either difficulty; when it's unclear which,
+	 * the first boss listed gets it.
+	 */
+	private static final Map<String, List<Boss>> CONTAINER_OWNERS = new HashMap<>();
+
+	static
+	{
+		CONTAINER_OWNERS.put("frozen cache", Collections.singletonList(Boss.PHANTOM_MUSPAH));
+		CONTAINER_OWNERS.put("cache of runes", Arrays.asList(Boss.TOA_NORMAL, Boss.TOA_EXPERT));
+		CONTAINER_OWNERS.put("forgotten lockbox", Collections.singletonList(Boss.YAMA));
+		CONTAINER_OWNERS.put("dossier", Collections.singletonList(Boss.YAMA));
+	}
+
+	/**
+	 * @return the bosses that drop the container this loot event came from, or an empty list if
+	 * it didn't come from one.
+	 */
+	public static List<Boss> containerOwners(String lootEventName)
+	{
+		if (lootEventName == null)
+		{
+			return Collections.emptyList();
+		}
+		return CONTAINER_OWNERS.getOrDefault(lootEventName.toLowerCase(Locale.ROOT), Collections.emptyList());
+	}
+
+	/** Whether {@code boss} drops any container, so its loot panel has a section for them. */
+	public static boolean hasContainers(Boss boss)
+	{
+		for (List<Boss> owners : CONTAINER_OWNERS.values())
+		{
+			if (owners.contains(boss))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public static boolean hasMinions(Boss boss)

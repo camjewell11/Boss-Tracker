@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -93,6 +94,25 @@ public class LootTracker
 	@Getter
 	private int sessionPerfectKills;
 
+	/**
+	 * What was inside the tracked boss's containers once opened (see
+	 * LootBossMatcher#containerOwners), kept apart from its drops like the perfect-kill bonus.
+	 */
+	@Getter
+	private final Map<Integer, Integer> sessionCacheLoot = new ConcurrentHashMap<>();
+
+	@Getter
+	private final Map<Integer, Integer> lifetimeCacheLoot = new ConcurrentHashMap<>();
+
+	@Getter
+	private int sessionCachesOpened;
+
+	@Getter
+	private int lifetimeCachesOpened;
+
+	private Map<Integer, Integer> goalLoot = Collections.emptyMap();
+	private int goalLootVersion = -1;
+
 	/** Each item's price when it last dropped this session, saved with the session in History. */
 	@Getter
 	private final Map<Integer, Long> sessionDropPrices = new ConcurrentHashMap<>();
@@ -147,6 +167,8 @@ public class LootTracker
 		sessionMinionKills = 0;
 		sessionPerfectBonusLoot.clear();
 		sessionPerfectKills = 0;
+		sessionCacheLoot.clear();
+		sessionCachesOpened = 0;
 		sessionDropPrices.clear();
 		uniqueKillCounts.clearDrops();
 		trackedBoss = null;
@@ -165,9 +187,11 @@ public class LootTracker
 		sessionMinionKills = entry.getMinionKills();
 		sessionPerfectBonusLoot.putAll(entry.getPerfectBonusItemQuantities());
 		sessionPerfectKills = entry.getPerfectKills();
+		sessionCacheLoot.putAll(entry.getCacheLootItemQuantities());
+		sessionCachesOpened = entry.getCachesOpened();
 		sessionDropPrices.putAll(entry.getItemPricesAtDrop());
 		uniqueKillCounts.restoreDrops(boss, entry.getUniqueKillCounts());
-		for (Map<Integer, Integer> loot : Arrays.asList(sessionLoot, sessionMinionLoot, sessionPerfectBonusLoot))
+		for (Map<Integer, Integer> loot : Arrays.asList(sessionLoot, sessionMinionLoot, sessionPerfectBonusLoot, sessionCacheLoot))
 		{
 			for (int itemId : loot.keySet())
 			{
@@ -175,6 +199,23 @@ public class LootTracker
 			}
 		}
 		version++;
+	}
+
+	/**
+	 * What the tracked boss's goals count: its all-time drops plus its all-time cache loot, which
+	 * drops with the kill even though the loot panel shows it apart. Rebuilt only when the loot
+	 * changes, since the goal overlay reads it every frame.
+	 */
+	public synchronized Map<Integer, Integer> getGoalLoot()
+	{
+		if (goalLootVersion != version)
+		{
+			Map<Integer, Integer> combined = new HashMap<>(lifetimeLoot);
+			lifetimeCacheLoot.forEach((itemId, quantity) -> combined.merge(itemId, quantity, Integer::sum));
+			goalLoot = Collections.unmodifiableMap(combined);
+			goalLootVersion = version;
+		}
+		return goalLoot;
 	}
 
 	/** Called for every kill-count message, so uniques can record the kill they dropped on. */
@@ -206,6 +247,8 @@ public class LootTracker
 		lifetimeMinionKills = 0;
 		lifetimePerfectBonusLoot.clear();
 		lifetimePerfectKills = 0;
+		lifetimeCacheLoot.clear();
+		lifetimeCachesOpened = 0;
 		ignoredItemIds.clear();
 		lifetimeKillsTracked = 0;
 		lifetimeTimeActualSeconds = 0;
@@ -230,6 +273,8 @@ public class LootTracker
 				lifetimeMinionKills = loot.getMinionKills();
 				lifetimePerfectBonusLoot.putAll(loot.getPerfectBonusItemQuantities());
 				lifetimePerfectKills = loot.getPerfectKills();
+				lifetimeCacheLoot.putAll(loot.getCacheItemQuantities());
+				lifetimeCachesOpened = loot.getCachesOpened();
 				ignoredItemIds.addAll(loot.getIgnoredItemIds());
 				lifetimeKillsTracked = stats.getKillsTracked();
 				lifetimeTimeActualSeconds = stats.getTotalTimeActualSeconds();
@@ -254,6 +299,10 @@ public class LootTracker
 					{
 						priceCache.warmIfAbsent(itemId);
 					}
+					for (int itemId : loot.getCacheItemQuantities().keySet())
+					{
+						priceCache.warmIfAbsent(itemId);
+					}
 					version++;
 				});
 			}
@@ -266,12 +315,22 @@ public class LootTracker
 	 * original plugin's behavior of only recording loot while actively tracking that boss).
 	 *
 	 * @return the boss's own drops as recorded, with any perfect-kill bonus taken out, or null if
-	 * this wasn't {@code sessionBoss}'s loot. Minion drops are recorded too but return null: they
-	 * are not the boss's loot and belong to no trip.
+	 * this wasn't {@code sessionBoss}'s loot. Minion drops and opened containers are recorded too
+	 * but return null: they are kept apart from the boss's loot and belong to no trip.
 	 */
 	public List<ItemStack> onLootReceived(Boss sessionBoss, String lootEventName, Collection<ItemStack> items)
 	{
-		if (sessionBoss == null || items == null || items.isEmpty())
+		if (items == null || items.isEmpty())
+		{
+			return null;
+		}
+		List<Boss> containerOwners = LootBossMatcher.containerOwners(lootEventName);
+		if (!containerOwners.isEmpty())
+		{
+			recordContainerLoot(sessionBoss, containerOwners, lootEventName, items);
+			return null;
+		}
+		if (sessionBoss == null)
 		{
 			return null;
 		}
@@ -329,9 +388,69 @@ public class LootTracker
 
 		version++;
 
-		goalManager.onLootChanged(sessionBoss, lifetimeLoot);
+		goalManager.onLootChanged(sessionBoss, getGoalLoot());
 		persistLoot(sessionBoss, bossItems);
 		return bossItems;
+	}
+
+	/**
+	 * Records what was inside an opened container, kept out of the boss's normal loot totals like
+	 * the perfect-kill bonus. RuneLite reports it whenever the container is opened, so one opened
+	 * at the bank after its session still counts toward its boss's all-time cache loot, even while
+	 * another boss is being tracked. A container more than one boss drops (the Cache of runes, from
+	 * either Tombs of Amascut difficulty) goes to whichever of them was tracked last, or to the
+	 * first listed (Normal) if neither has been tracked since the client started.
+	 */
+	private void recordContainerLoot(Boss sessionBoss, List<Boss> owners, String lootEventName, Collection<ItemStack> items)
+	{
+		boolean inSession = owners.contains(sessionBoss);
+		Boss boss = inSession ? sessionBoss : owners.contains(trackedBoss) ? trackedBoss : owners.get(0);
+		log.debug("{} opened for {} ({}): {}", lootEventName, boss, inSession ? "this session" : "all-time only", items);
+
+		if (inSession)
+		{
+			ensureLoaded(boss);
+		}
+		for (ItemStack stack : items)
+		{
+			priceCache.warm(stack.getId());
+			if (inSession)
+			{
+				sessionDropPrices.put(stack.getId(), priceCache.getPrice(stack.getId()));
+				sessionCacheLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			}
+			if (boss == trackedBoss)
+			{
+				lifetimeCacheLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			}
+		}
+		if (inSession)
+		{
+			sessionCachesOpened++;
+		}
+		if (boss == trackedBoss)
+		{
+			lifetimeCachesOpened++;
+			version++;
+			goalManager.onLootChanged(boss, getGoalLoot());
+		}
+
+		if (asyncExecutor == null)
+		{
+			return;
+		}
+		long accountHash = client.getAccountHash();
+		List<ItemStack> snapshot = new ArrayList<>(items);
+		asyncExecutor.execute(() ->
+		{
+			BossLoot loot = lootStore.load(accountHash, boss);
+			for (ItemStack stack : snapshot)
+			{
+				loot.getCacheItemQuantities().merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			}
+			loot.setCachesOpened(loot.getCachesOpened() + 1);
+			lootStore.save(accountHash, boss, loot);
+		});
 	}
 
 	/**
@@ -384,7 +503,7 @@ public class LootTracker
 		lifetimeLoot.merge(petItemId, 1, Integer::sum);
 		uniqueKillCounts.onUnique(boss, petItemId, Instant.now());
 		version++;
-		goalManager.onLootChanged(boss, lifetimeLoot);
+		goalManager.onLootChanged(boss, getGoalLoot());
 		persistLoot(boss, Collections.singletonList(new ItemStack(petItemId, 1)));
 	}
 

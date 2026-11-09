@@ -93,6 +93,10 @@ public class SessionHistoryManager
 					{
 						priceCache.warmIfAbsent(itemId);
 					}
+					for (int itemId : entry.getCacheLootItemQuantities().keySet())
+					{
+						priceCache.warmIfAbsent(itemId);
+					}
 				}
 				// Reopening History usually finds nothing new; leaving the version alone then
 				// spares the panel rebuilding every row.

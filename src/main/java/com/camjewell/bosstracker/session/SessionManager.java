@@ -1139,6 +1139,8 @@ public class SessionManager
 		entry.setMinionKills(lootTracker.getSessionMinionKills());
 		entry.setPerfectBonusItemQuantities(new LinkedHashMap<>(lootTracker.getSessionPerfectBonusLoot()));
 		entry.setPerfectKills(lootTracker.getSessionPerfectKills());
+		entry.setCacheLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionCacheLoot()));
+		entry.setCachesOpened(lootTracker.getSessionCachesOpened());
 		entry.setItemPricesAtDrop(new LinkedHashMap<>(lootTracker.getSessionDropPrices()));
 		entry.setUniqueKillCounts(lootTracker.getSessionUniqueKillCounts());
 		entry.setNotes(endedSession.getNotes());

@@ -154,13 +154,13 @@ public class BossGoalOverlay extends Overlay
 			panelComponent.getChildren().add(progressBarComponent);
 		}
 
-		Map<Integer, Integer> lifetimeLoot = lootTracker.getLifetimeLoot();
+		Map<Integer, Integer> goalLoot = lootTracker.getGoalLoot();
 		for (ItemGoal item : goal.getItemGoals())
 		{
 			panelComponent.getChildren().add(LineComponent.builder()
 				.left(item.getItemName() + ":")
-				.right(Math.min(item.obtained(lifetimeLoot), item.getQuantity()) + "/" + item.getQuantity())
-				.rightColor(item.isComplete(lifetimeLoot) ? PROGRESS_COLOR : Color.WHITE)
+				.right(Math.min(item.obtained(goalLoot), item.getQuantity()) + "/" + item.getQuantity())
+				.rightColor(item.isComplete(goalLoot) ? PROGRESS_COLOR : Color.WHITE)
 				.build());
 		}
 
@@ -183,7 +183,7 @@ public class BossGoalOverlay extends Overlay
 		}
 		cachedLootGoalGpVersion = lootTracker.getVersion();
 		cachedLootGoalBaseline = goal.getLootGoalBaseline();
-		cachedLootGoalGp = goal.lootProgressGp(lootTracker.getLifetimeLoot(), priceCache::getPrice);
+		cachedLootGoalGp = goal.lootProgressGp(lootTracker.getGoalLoot(), priceCache::getPrice);
 		return cachedLootGoalGp;
 	}
 

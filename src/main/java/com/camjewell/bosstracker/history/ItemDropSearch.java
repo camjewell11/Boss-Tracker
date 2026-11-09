@@ -74,6 +74,7 @@ public final class ItemDropSearch
 			collect(entry.getLootItemQuantities(), itemNames, needle, quantityByName, itemIds);
 			collect(entry.getMinionLootItemQuantities(), itemNames, needle, quantityByName, itemIds);
 			collect(entry.getPerfectBonusItemQuantities(), itemNames, needle, quantityByName, itemIds);
+			collect(entry.getCacheLootItemQuantities(), itemNames, needle, quantityByName, itemIds);
 			quantityByName.forEach((name, quantity) ->
 				dropsByName.computeIfAbsent(name, n -> new ArrayList<>()).add(new Drop(entry, quantity)));
 		}

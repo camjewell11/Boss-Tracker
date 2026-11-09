@@ -61,6 +61,11 @@ public class SessionHistoryEntry
 
 	private int perfectKills;
 
+	/** What was inside the containers opened during the session, kept apart from the drops. */
+	private Map<Integer, Integer> cacheLootItemQuantities = new LinkedHashMap<>();
+
+	private int cachesOpened;
+
 	/**
 	 * Each item's price when it dropped, so a saved session keeps the value it had at the time
 	 * instead of moving with the Grand Exchange. Empty for sessions saved before this was

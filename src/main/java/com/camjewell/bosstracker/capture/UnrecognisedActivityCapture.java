@@ -155,6 +155,10 @@ public class UnrecognisedActivityCapture
 
 	private static boolean isKnownLoot(String name)
 	{
+		if (!LootBossMatcher.containerOwners(name).isEmpty())
+		{
+			return true;
+		}
 		for (Boss boss : Boss.values())
 		{
 			if (LootBossMatcher.matchesLootEvent(boss, name) || LootBossMatcher.matchesMinionLootEvent(boss, name))

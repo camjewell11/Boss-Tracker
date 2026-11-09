@@ -1,6 +1,10 @@
 package com.camjewell.bosstracker.loot;
 
 import com.camjewell.bosstracker.boss.Boss;
+import com.google.gson.Gson;
+import java.util.Arrays;
+import java.util.Collections;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
@@ -98,5 +102,32 @@ public class LootBossMatcherTest
 	public void madAngelLootMatchesItsName()
 	{
 		assertTrue(LootBossMatcher.matchesLootEvent(Boss.MAD_ANGEL, "Mad Angel"));
+	}
+
+	@Test
+	public void cachesBelongToTheBossesThatDropThem()
+	{
+		assertEquals(Collections.singletonList(Boss.PHANTOM_MUSPAH), LootBossMatcher.containerOwners("Frozen cache"));
+		assertEquals(Arrays.asList(Boss.TOA_NORMAL, Boss.TOA_EXPERT), LootBossMatcher.containerOwners("Cache of runes"));
+		assertEquals(Collections.singletonList(Boss.YAMA), LootBossMatcher.containerOwners("Forgotten lockbox"));
+		assertTrue(LootBossMatcher.containerOwners("Casket").isEmpty());
+		assertTrue(LootBossMatcher.containerOwners(null).isEmpty());
+	}
+
+	/**
+	 * RuneLite names a container's loot after the item, so each container has to be one of its
+	 * bosses' drops under that name, or its loot would never match.
+	 */
+	@Test
+	public void everyCacheIsInItsBossesDropTable()
+	{
+		DropTables dropTables = new DropTables(new Gson());
+		for (String container : Arrays.asList("Frozen cache", "Cache of runes", "Forgotten lockbox", "Dossier"))
+		{
+			for (Boss boss : LootBossMatcher.containerOwners(container))
+			{
+				assertTrue(boss + " doesn't drop " + container, dropTables.drops(boss).containsKey(container));
+			}
+		}
 	}
 }
