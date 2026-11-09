@@ -11,6 +11,7 @@ import com.camjewell.bosstracker.loot.DropTables;
 import com.camjewell.bosstracker.loot.LootBossMatcher;
 import com.camjewell.bosstracker.loot.NotableDrops;
 import com.camjewell.bosstracker.loot.PerfectKillLoot;
+import com.camjewell.bosstracker.loot.SupplyDrops;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.loot.UniqueSplits;
 import com.camjewell.bosstracker.persistence.BossStats;
@@ -204,6 +205,7 @@ public class BossTrackerPanel extends PluginPanel
 	private final ExtraLootSection minionSection = new ExtraLootSection();
 	private final ExtraLootSection perfectBonusSection = new ExtraLootSection();
 	private final ExtraLootSection cacheSection = new ExtraLootSection();
+	private final ExtraLootSection supplySection = new ExtraLootSection();
 	private int lastRenderedLootVersion = -1;
 	private boolean lastRenderedLootAllTime;
 	private boolean lastRenderedLootShowIgnored;
@@ -1090,6 +1092,7 @@ public class BossTrackerPanel extends PluginPanel
 			minionSection.grid.setVisible(!lootCollapseButton.isSelected());
 			perfectBonusSection.grid.setVisible(!lootCollapseButton.isSelected());
 			cacheSection.grid.setVisible(!lootCollapseButton.isSelected());
+			supplySection.grid.setVisible(!lootCollapseButton.isSelected());
 			sessionViewPanel.revalidate();
 			sessionViewPanel.repaint();
 		});
@@ -1145,6 +1148,7 @@ public class BossTrackerPanel extends PluginPanel
 		extraLootSections.add(minionSection.panel);
 		extraLootSections.add(perfectBonusSection.panel);
 		extraLootSections.add(cacheSection.panel);
+		extraLootSections.add(supplySection.panel);
 		extraSections.add(extraLootSections, BorderLayout.NORTH);
 		liveTeammateHolder.setOpaque(false);
 		liveTeammateHolder.setBorder(new EmptyBorder(0, 5, 8, 2));
@@ -1174,6 +1178,7 @@ public class BossTrackerPanel extends PluginPanel
 				minionSection.panel.setVisible(false);
 				perfectBonusSection.panel.setVisible(false);
 				cacheSection.panel.setVisible(false);
+				supplySection.panel.setVisible(false);
 				lastRenderedLootBoss = null;
 				lastRenderedLootVersion = -1;
 			}
@@ -1242,10 +1247,13 @@ public class BossTrackerPanel extends PluginPanel
 		refreshExtraSection(cacheSection, LootBossMatcher.hasContainers(boss), "Cache Loot", "Caches Opened",
 			allTime ? lootTracker.getLifetimeCacheLoot() : lootTracker.getSessionCacheLoot(),
 			allTime ? lootTracker.getLifetimeCachesOpened() : lootTracker.getSessionCachesOpened(), showIgnored);
+		refreshExtraSection(supplySection, SupplyDrops.hasSupplies(boss), "Supplies", "Supply Drops",
+			allTime ? lootTracker.getLifetimeSupplyLoot() : lootTracker.getSessionSupplyLoot(),
+			allTime ? lootTracker.getLifetimeSupplyDrops() : lootTracker.getSessionSupplyDrops(), showIgnored);
 	}
 
 	/**
-	 * A loot section under the boss's own (minion drops, perfect-kill bonus, cache loot): a title, then its
+	 * A loot section under the boss's own (minion drops, perfect-kill bonus, cache loot, supplies): a title, then its
 	 * kill count and total value laid out like the main loot stats, then its grid. Follows the
 	 * same session/all-time toggle, and is hidden for bosses it doesn't apply to and until its
 	 * first drop.
@@ -3669,6 +3677,12 @@ public class BossTrackerPanel extends PluginPanel
 			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
 			detailPanel.add(buildHistoryExtraSection(entry, entry.getCacheLootItemQuantities(),
 				"Caches Opened", entry.getCachesOpened(), "Cache GP"));
+		}
+		if (entry.getSupplyItemQuantities() != null && !entry.getSupplyItemQuantities().isEmpty())
+		{
+			detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+			detailPanel.add(buildHistoryExtraSection(entry, entry.getSupplyItemQuantities(),
+				"Supply Drops", entry.getSupplyDrops(), "Supplies GP"));
 		}
 		if (raid)
 		{

@@ -66,6 +66,11 @@ public class SessionHistoryEntry
 
 	private int cachesOpened;
 
+	/** The food and potions from the session's supply drops, kept apart from the drops. */
+	private Map<Integer, Integer> supplyItemQuantities = new LinkedHashMap<>();
+
+	private int supplyDrops;
+
 	/**
 	 * Each item's price when it dropped, so a saved session keeps the value it had at the time
 	 * instead of moving with the Grand Exchange. Empty for sessions saved before this was

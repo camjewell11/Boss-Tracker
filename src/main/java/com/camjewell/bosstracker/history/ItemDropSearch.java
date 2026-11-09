@@ -11,8 +11,9 @@ import lombok.Value;
 
 /**
  * Finds which saved sessions dropped an item, for the search view. Matches item names containing
- * the query, so "runite" finds runite ore and runite bolts. A session's regular, minion and
- * perfect-kill loot all count, and noted and unnoted drops of the same item are combined by name.
+ * the query, so "runite" finds runite ore and runite bolts. A session's regular, minion,
+ * perfect-kill, cache and supply loot all count, and noted and unnoted drops of the same item are
+ * combined by name.
  */
 public final class ItemDropSearch
 {
@@ -75,6 +76,7 @@ public final class ItemDropSearch
 			collect(entry.getMinionLootItemQuantities(), itemNames, needle, quantityByName, itemIds);
 			collect(entry.getPerfectBonusItemQuantities(), itemNames, needle, quantityByName, itemIds);
 			collect(entry.getCacheLootItemQuantities(), itemNames, needle, quantityByName, itemIds);
+			collect(entry.getSupplyItemQuantities(), itemNames, needle, quantityByName, itemIds);
 			quantityByName.forEach((name, quantity) ->
 				dropsByName.computeIfAbsent(name, n -> new ArrayList<>()).add(new Drop(entry, quantity)));
 		}

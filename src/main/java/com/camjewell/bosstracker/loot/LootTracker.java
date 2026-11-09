@@ -110,6 +110,19 @@ public class LootTracker
 	@Getter
 	private int lifetimeCachesOpened;
 
+	/** The tracked boss's supply drops (see SupplyDrops), kept apart from its loot like minion drops. */
+	@Getter
+	private final Map<Integer, Integer> sessionSupplyLoot = new ConcurrentHashMap<>();
+
+	@Getter
+	private final Map<Integer, Integer> lifetimeSupplyLoot = new ConcurrentHashMap<>();
+
+	@Getter
+	private int sessionSupplyDrops;
+
+	@Getter
+	private int lifetimeSupplyDrops;
+
 	private Map<Integer, Integer> goalLoot = Collections.emptyMap();
 	private int goalLootVersion = -1;
 
@@ -169,6 +182,8 @@ public class LootTracker
 		sessionPerfectKills = 0;
 		sessionCacheLoot.clear();
 		sessionCachesOpened = 0;
+		sessionSupplyLoot.clear();
+		sessionSupplyDrops = 0;
 		sessionDropPrices.clear();
 		uniqueKillCounts.clearDrops();
 		trackedBoss = null;
@@ -189,9 +204,12 @@ public class LootTracker
 		sessionPerfectKills = entry.getPerfectKills();
 		sessionCacheLoot.putAll(entry.getCacheLootItemQuantities());
 		sessionCachesOpened = entry.getCachesOpened();
+		sessionSupplyLoot.putAll(entry.getSupplyItemQuantities());
+		sessionSupplyDrops = entry.getSupplyDrops();
 		sessionDropPrices.putAll(entry.getItemPricesAtDrop());
 		uniqueKillCounts.restoreDrops(boss, entry.getUniqueKillCounts());
-		for (Map<Integer, Integer> loot : Arrays.asList(sessionLoot, sessionMinionLoot, sessionPerfectBonusLoot, sessionCacheLoot))
+		for (Map<Integer, Integer> loot : Arrays.asList(sessionLoot, sessionMinionLoot, sessionPerfectBonusLoot, sessionCacheLoot,
+			sessionSupplyLoot))
 		{
 			for (int itemId : loot.keySet())
 			{
@@ -249,6 +267,8 @@ public class LootTracker
 		lifetimePerfectKills = 0;
 		lifetimeCacheLoot.clear();
 		lifetimeCachesOpened = 0;
+		lifetimeSupplyLoot.clear();
+		lifetimeSupplyDrops = 0;
 		ignoredItemIds.clear();
 		lifetimeKillsTracked = 0;
 		lifetimeTimeActualSeconds = 0;
@@ -275,6 +295,8 @@ public class LootTracker
 				lifetimePerfectKills = loot.getPerfectKills();
 				lifetimeCacheLoot.putAll(loot.getCacheItemQuantities());
 				lifetimeCachesOpened = loot.getCachesOpened();
+				lifetimeSupplyLoot.putAll(loot.getSupplyItemQuantities());
+				lifetimeSupplyDrops = loot.getSupplyDrops();
 				ignoredItemIds.addAll(loot.getIgnoredItemIds());
 				lifetimeKillsTracked = stats.getKillsTracked();
 				lifetimeTimeActualSeconds = stats.getTotalTimeActualSeconds();
@@ -303,6 +325,10 @@ public class LootTracker
 					{
 						priceCache.warmIfAbsent(itemId);
 					}
+					for (int itemId : loot.getSupplyItemQuantities().keySet())
+					{
+						priceCache.warmIfAbsent(itemId);
+					}
 					version++;
 				});
 			}
@@ -314,9 +340,10 @@ public class LootTracker
 	 * the active session is tracking (loot for any other boss/event is ignored, matching the
 	 * original plugin's behavior of only recording loot while actively tracking that boss).
 	 *
-	 * @return the boss's own drops as recorded, with any perfect-kill bonus taken out, or null if
-	 * this wasn't {@code sessionBoss}'s loot. Minion drops and opened containers are recorded too
-	 * but return null: they are kept apart from the boss's loot and belong to no trip.
+	 * @return the boss's own drops as recorded, with any perfect-kill bonus and supplies taken
+	 * out, or null if this wasn't {@code sessionBoss}'s loot. Minion drops and opened containers
+	 * are recorded too but return null: they are kept apart from the boss's loot and belong to
+	 * no trip.
 	 */
 	public List<ItemStack> onLootReceived(Boss sessionBoss, String lootEventName, Collection<ItemStack> items)
 	{
@@ -348,6 +375,7 @@ public class LootTracker
 
 		List<ItemStack> bossItems = new ArrayList<>();
 		List<ItemStack> bonusItems = new ArrayList<>();
+		List<ItemStack> supplyItems = new ArrayList<>();
 		for (ItemStack stack : items)
 		{
 			// Warm the price cache while we're on the client thread (LootReceived is a game
@@ -355,6 +383,11 @@ public class LootTracker
 			// cached name is also what identifies a perfect-kill drop.
 			priceCache.warm(stack.getId());
 
+			if (SupplyDrops.isSupply(sessionBoss, stack.getId(), stack.getQuantity()))
+			{
+				supplyItems.add(stack);
+				continue;
+			}
 			int bonus = PerfectKillLoot.bonusQuantity(sessionBoss, priceCache.getName(stack.getId()), stack.getQuantity());
 			if (bonus > 0)
 			{
@@ -384,6 +417,10 @@ public class LootTracker
 		if (!bonusItems.isEmpty())
 		{
 			recordPerfectBonus(sessionBoss, bonusItems);
+		}
+		if (!supplyItems.isEmpty())
+		{
+			recordSupplies(sessionBoss, supplyItems);
 		}
 
 		version++;
@@ -481,6 +518,35 @@ public class LootTracker
 				loot.getPerfectBonusItemQuantities().merge(stack.getId(), stack.getQuantity(), Integer::sum);
 			}
 			loot.setPerfectKills(loot.getPerfectKills() + 1);
+			lootStore.save(accountHash, boss, loot);
+		});
+	}
+
+	/** Records a kill's supply drop, kept out of the boss's loot totals and goals like minion drops. */
+	private void recordSupplies(Boss boss, List<ItemStack> supplyItems)
+	{
+		log.debug("Supplies from {}: {}", boss, supplyItems);
+		for (ItemStack stack : supplyItems)
+		{
+			sessionSupplyLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			lifetimeSupplyLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+		}
+		sessionSupplyDrops++;
+		lifetimeSupplyDrops++;
+
+		if (asyncExecutor == null)
+		{
+			return;
+		}
+		long accountHash = client.getAccountHash();
+		asyncExecutor.execute(() ->
+		{
+			BossLoot loot = lootStore.load(accountHash, boss);
+			for (ItemStack stack : supplyItems)
+			{
+				loot.getSupplyItemQuantities().merge(stack.getId(), stack.getQuantity(), Integer::sum);
+			}
+			loot.setSupplyDrops(loot.getSupplyDrops() + 1);
 			lootStore.save(accountHash, boss, loot);
 		});
 	}

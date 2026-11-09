@@ -1141,6 +1141,8 @@ public class SessionManager
 		entry.setPerfectKills(lootTracker.getSessionPerfectKills());
 		entry.setCacheLootItemQuantities(new LinkedHashMap<>(lootTracker.getSessionCacheLoot()));
 		entry.setCachesOpened(lootTracker.getSessionCachesOpened());
+		entry.setSupplyItemQuantities(new LinkedHashMap<>(lootTracker.getSessionSupplyLoot()));
+		entry.setSupplyDrops(lootTracker.getSessionSupplyDrops());
 		entry.setItemPricesAtDrop(new LinkedHashMap<>(lootTracker.getSessionDropPrices()));
 		entry.setUniqueKillCounts(lootTracker.getSessionUniqueKillCounts());
 		entry.setNotes(endedSession.getNotes());
