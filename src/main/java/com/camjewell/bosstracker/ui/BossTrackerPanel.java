@@ -2405,10 +2405,14 @@ public class BossTrackerPanel extends PluginPanel
 			}
 		}
 
+		// A raid shows each of its modes with anything saved, and the one searched for regardless.
 		Boss boss = lookupManager.getBoss();
-		if (boss != null)
+		for (BossLookupManager.Result result : lookupManager.getResults())
 		{
-			searchResultPanel.add(buildLookupResultPanel(boss));
+			if (result.getBoss() == boss || result.hasData())
+			{
+				searchResultPanel.add(buildLookupResultPanel(result));
+			}
 		}
 
 		List<ItemDropSearch.ItemMatch> itemMatches =
@@ -2516,10 +2520,11 @@ public class BossTrackerPanel extends PluginPanel
 		return results;
 	}
 
-	private JPanel buildLookupResultPanel(Boss boss)
+	private JPanel buildLookupResultPanel(BossLookupManager.Result result)
 	{
-		BossStats stats = lookupManager.getStats();
-		BossLoot loot = lookupManager.getLoot();
+		Boss boss = result.getBoss();
+		BossStats stats = result.getStats();
+		BossLoot loot = result.getLoot();
 		Map<Integer, Integer> lootMap = loot.getItemQuantities();
 		List<LookupExtraLoot> extras = lookupExtraLoot(loot);
 		boolean grouped = lookupLootGrouped && !extras.isEmpty();

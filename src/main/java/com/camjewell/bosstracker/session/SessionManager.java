@@ -663,10 +663,12 @@ public class SessionManager
 			case CM_CHAMBERS:
 				varbit = VarbitID.RAIDS_CLIENT_INDUNGEON;
 				break;
+			case THEATRE_OF_BLOOD_ENTRY:
 			case THEATRE_OF_BLOOD:
 			case THEATRE_OF_BLOOD_HM:
 				varbit = VarbitID.TOB_CLIENT_PARTYSTATUS;
 				break;
+			case TOA_ENTRY:
 			case TOA_NORMAL:
 			case TOA_EXPERT:
 				varbit = VarbitID.TOA_CLIENT_PARTYSTATUS;

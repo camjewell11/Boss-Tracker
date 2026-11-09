@@ -108,7 +108,7 @@ public class LootBossMatcherTest
 	public void cachesBelongToTheBossesThatDropThem()
 	{
 		assertEquals(Collections.singletonList(Boss.PHANTOM_MUSPAH), LootBossMatcher.containerOwners("Frozen cache"));
-		assertEquals(Arrays.asList(Boss.TOA_NORMAL, Boss.TOA_EXPERT), LootBossMatcher.containerOwners("Cache of runes"));
+		assertEquals(Arrays.asList(Boss.TOA_NORMAL, Boss.TOA_EXPERT, Boss.TOA_ENTRY), LootBossMatcher.containerOwners("Cache of runes"));
 		assertEquals(Collections.singletonList(Boss.YAMA), LootBossMatcher.containerOwners("Forgotten lockbox"));
 		assertTrue(LootBossMatcher.containerOwners("Casket").isEmpty());
 		assertTrue(LootBossMatcher.containerOwners(null).isEmpty());

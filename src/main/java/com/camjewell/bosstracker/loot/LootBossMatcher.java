@@ -43,8 +43,10 @@ public final class LootBossMatcher
 	{
 		LOOT_ALIASES.put(Boss.CHAMBERS, Collections.singletonList("Chambers of Xeric"));
 		LOOT_ALIASES.put(Boss.CM_CHAMBERS, Collections.singletonList("Chambers of Xeric"));
+		LOOT_ALIASES.put(Boss.TOA_ENTRY, Collections.singletonList("Tombs of Amascut"));
 		LOOT_ALIASES.put(Boss.TOA_NORMAL, Collections.singletonList("Tombs of Amascut"));
 		LOOT_ALIASES.put(Boss.TOA_EXPERT, Collections.singletonList("Tombs of Amascut"));
+		LOOT_ALIASES.put(Boss.THEATRE_OF_BLOOD_ENTRY, Collections.singletonList("Theatre of Blood"));
 		LOOT_ALIASES.put(Boss.THEATRE_OF_BLOOD, Collections.singletonList("Theatre of Blood"));
 		LOOT_ALIASES.put(Boss.THEATRE_OF_BLOOD_HM, Collections.singletonList("Theatre of Blood"));
 		LOOT_ALIASES.put(Boss.GAUNTLET, Arrays.asList("Crystalline Hunllef", "Corrupted Hunllef", "The Gauntlet"));
@@ -80,7 +82,7 @@ public final class LootBossMatcher
 	 * Drops that are opened for more loot. RuneLite reports what's inside as an event named after
 	 * the item (it reads the name from the item, so these match the wiki's item names), whenever
 	 * it's opened: often at the bank, after the session that dropped it has ended. The Cache of
-	 * runes comes from the Tombs of Amascut chest at either difficulty; when it's unclear which,
+	 * runes comes from the Tombs of Amascut chest at any difficulty; when it's unclear which,
 	 * the first boss listed gets it.
 	 */
 	private static final Map<String, List<Boss>> CONTAINER_OWNERS = new HashMap<>();
@@ -88,7 +90,7 @@ public final class LootBossMatcher
 	static
 	{
 		CONTAINER_OWNERS.put("frozen cache", Collections.singletonList(Boss.PHANTOM_MUSPAH));
-		CONTAINER_OWNERS.put("cache of runes", Arrays.asList(Boss.TOA_NORMAL, Boss.TOA_EXPERT));
+		CONTAINER_OWNERS.put("cache of runes", Arrays.asList(Boss.TOA_NORMAL, Boss.TOA_EXPERT, Boss.TOA_ENTRY));
 		CONTAINER_OWNERS.put("forgotten lockbox", Collections.singletonList(Boss.YAMA));
 		CONTAINER_OWNERS.put("dossier", Collections.singletonList(Boss.YAMA));
 	}

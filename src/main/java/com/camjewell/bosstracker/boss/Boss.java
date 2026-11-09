@@ -37,6 +37,8 @@ public enum Boss
 	LEVIATHAN("The Leviathan", ItemID.LEVIATHANPET, "Your Leviathan kill count is:"),
 	CHAMBERS("Chambers", ItemID.OLMPET, "Your completed Chambers of Xeric count is:", "chambers of xeric", "cox"),
 	CM_CHAMBERS("CM Chambers", ItemID.OLMPET, "Your completed Chambers of Xeric Challenge Mode count is:", "cm", "cm cox", "challange mode", "challange mode chambers of xeric"),
+	TOA_ENTRY("TOA Entry", ItemID.WARDENPET_TUMEKEN, "Your completed Tombs of Amascut: Entry Mode count is:",
+		"toa entry", "toa entry mode"),
 	TOA_NORMAL("TOA Normal", ItemID.WARDENPET_TUMEKEN, "Your completed Tombs of Amascut count is:", "toa"),
 	TOA_EXPERT("TOA Expert", ItemID.WARDENPET_ELIDINIS, "Your completed Tombs of Amascut: Expert Mode count is:"),
 	FRACTURED_ARCHIVE("Fractured Archive", ItemID.OCELLUSPET, "Your completed Fractured Archive count is:",
@@ -47,6 +49,8 @@ public enum Boss
 		Arrays.asList("Your Gauntlet completion count is:", "Your Corrupted Gauntlet completion count is:"),
 		TimingFamily.NONE, false, null, Collections.singletonList("Gauntlet"),
 		Arrays.asList("corrupted gauntlet", "c gauntlet", "cg")),
+	THEATRE_OF_BLOOD_ENTRY("Theatre of Blood Entry", ItemID.VERZIKPET, "Your completed Theatre of Blood: Entry Mode count is:",
+		"theatre entry", "tob entry", "tob entry mode"),
 	THEATRE_OF_BLOOD("Theatre of Blood", ItemID.VERZIKPET, "Your completed Theatre of Blood count is:", "theatre", "tob"),
 	THEATRE_OF_BLOOD_HM("Theatre of Blood HM", ItemID.SOTETSEGPET, "Your completed Theatre of Blood: Hard Mode count is:", "theatre hm", "tob hm", "hm"),
 	VORKATH("Vorkath", ItemID.VORKATHPET, "Your Vorkath kill count is:", "vork"),
@@ -200,11 +204,22 @@ public enum Boss
 	 * nothing: dying ends the run itself, and raids have banks inside them.
 	 */
 	private static final Set<Boss> NO_TRIPS = EnumSet.of(
-		CHAMBERS, CM_CHAMBERS, TOA_NORMAL, TOA_EXPERT, FRACTURED_ARCHIVE, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM,
+		CHAMBERS, CM_CHAMBERS, TOA_ENTRY, TOA_NORMAL, TOA_EXPERT, FRACTURED_ARCHIVE,
+		THEATRE_OF_BLOOD_ENTRY, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM,
 		GAUNTLET, COLOSSEUM, TZTOK_JAD, TZKAL_ZUK);
 
 	private static final Set<Boss> RAIDS = EnumSet.of(
-		CHAMBERS, CM_CHAMBERS, TOA_NORMAL, TOA_EXPERT, FRACTURED_ARCHIVE, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM);
+		CHAMBERS, CM_CHAMBERS, TOA_ENTRY, TOA_NORMAL, TOA_EXPERT, FRACTURED_ARCHIVE,
+		THEATRE_OF_BLOOD_ENTRY, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM);
+
+	/**
+	 * Each raid's modes, easiest first. They're tracked as separate bosses, but a search for one
+	 * shows them all.
+	 */
+	private static final List<List<Boss>> RAID_MODES = Arrays.asList(
+		Arrays.asList(CHAMBERS, CM_CHAMBERS),
+		Arrays.asList(TOA_ENTRY, TOA_NORMAL, TOA_EXPERT),
+		Arrays.asList(THEATRE_OF_BLOOD_ENTRY, THEATRE_OF_BLOOD, THEATRE_OF_BLOOD_HM));
 
 	/**
 	 * Display names a boss's data used to be saved under before bosses were merged. Their stats
@@ -242,6 +257,8 @@ public enum Boss
 		PET_ITEM_OVERRIDES.put(HESPORI, -1);
 		PET_ITEM_OVERRIDES.put(CHAOS_FANATIC, ItemID.CHAOSELEPET);
 		PET_ITEM_OVERRIDES.put(THEATRE_OF_BLOOD_HM, ItemID.VERZIKPET);
+		// Entry Mode never gives the pet.
+		PET_ITEM_OVERRIDES.put(THEATRE_OF_BLOOD_ENTRY, -1);
 
 		// Boss tasks: the assignment names the boss directly.
 		slayerTask("The Phantom Muspah", PHANTOM_MUSPAH);
@@ -357,6 +374,22 @@ public enum Boss
 	public int getPetItemId()
 	{
 		return PET_ITEM_OVERRIDES.getOrDefault(this, iconItemId);
+	}
+
+	/**
+	 * @return every mode of this boss's raid, easiest first, or just this boss if it isn't a raid
+	 * with modes
+	 */
+	public List<Boss> getModes()
+	{
+		for (List<Boss> modes : RAID_MODES)
+		{
+			if (modes.contains(this))
+			{
+				return modes;
+			}
+		}
+		return Collections.singletonList(this);
 	}
 
 	public List<String> getLegacyNames()

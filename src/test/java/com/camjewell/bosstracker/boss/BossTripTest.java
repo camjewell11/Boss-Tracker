@@ -1,5 +1,8 @@
 package com.camjewell.bosstracker.boss;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -11,8 +14,8 @@ public class BossTripTest
 	public void raidsAndSingleRunEncountersHaveNoTrips()
 	{
 		for (Boss boss : new Boss[]{
-			Boss.CHAMBERS, Boss.CM_CHAMBERS, Boss.TOA_NORMAL, Boss.TOA_EXPERT, Boss.FRACTURED_ARCHIVE,
-			Boss.THEATRE_OF_BLOOD, Boss.THEATRE_OF_BLOOD_HM,
+			Boss.CHAMBERS, Boss.CM_CHAMBERS, Boss.TOA_ENTRY, Boss.TOA_NORMAL, Boss.TOA_EXPERT, Boss.FRACTURED_ARCHIVE,
+			Boss.THEATRE_OF_BLOOD_ENTRY, Boss.THEATRE_OF_BLOOD, Boss.THEATRE_OF_BLOOD_HM,
 			Boss.GAUNTLET, Boss.COLOSSEUM, Boss.TZTOK_JAD, Boss.TZKAL_ZUK})
 		{
 			assertFalse(boss + " should not track trips", boss.tracksTrips());
@@ -23,8 +26,8 @@ public class BossTripTest
 	public void raidsAreEveryRaidModeAndTheArchive()
 	{
 		for (Boss boss : new Boss[]{
-			Boss.CHAMBERS, Boss.CM_CHAMBERS, Boss.TOA_NORMAL, Boss.TOA_EXPERT,
-			Boss.THEATRE_OF_BLOOD, Boss.THEATRE_OF_BLOOD_HM, Boss.FRACTURED_ARCHIVE})
+			Boss.CHAMBERS, Boss.CM_CHAMBERS, Boss.TOA_ENTRY, Boss.TOA_NORMAL, Boss.TOA_EXPERT,
+			Boss.THEATRE_OF_BLOOD_ENTRY, Boss.THEATRE_OF_BLOOD, Boss.THEATRE_OF_BLOOD_HM, Boss.FRACTURED_ARCHIVE})
 		{
 			assertTrue(boss + " is a raid", boss.isRaid());
 		}
@@ -67,5 +70,21 @@ public class BossTripTest
 		assertEquals(-1, Boss.DAGANNOTH_KINGS.getPetItemId());
 		assertEquals(Boss.CHAOS_ELEMENTAL.getIconItemId(), Boss.CHAOS_FANATIC.getPetItemId());
 		assertEquals(Boss.THEATRE_OF_BLOOD.getIconItemId(), Boss.THEATRE_OF_BLOOD_HM.getPetItemId());
+		assertEquals(-1, Boss.THEATRE_OF_BLOOD_ENTRY.getPetItemId());
+	}
+
+	@Test
+	public void aRaidsModesAreFoundFromAnyOfThem()
+	{
+		List<Boss> toa = Arrays.asList(Boss.TOA_ENTRY, Boss.TOA_NORMAL, Boss.TOA_EXPERT);
+		for (Boss mode : toa)
+		{
+			assertEquals(toa, mode.getModes());
+		}
+		assertEquals(Arrays.asList(Boss.CHAMBERS, Boss.CM_CHAMBERS), Boss.CM_CHAMBERS.getModes());
+		assertEquals(Arrays.asList(Boss.THEATRE_OF_BLOOD_ENTRY, Boss.THEATRE_OF_BLOOD, Boss.THEATRE_OF_BLOOD_HM),
+			Boss.THEATRE_OF_BLOOD.getModes());
+		assertEquals(Collections.singletonList(Boss.FRACTURED_ARCHIVE), Boss.FRACTURED_ARCHIVE.getModes());
+		assertEquals(Collections.singletonList(Boss.VORKATH), Boss.VORKATH.getModes());
 	}
 }
