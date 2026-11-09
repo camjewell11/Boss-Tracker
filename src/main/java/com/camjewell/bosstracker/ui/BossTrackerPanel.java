@@ -14,6 +14,7 @@ import com.camjewell.bosstracker.loot.PerfectKillLoot;
 import com.camjewell.bosstracker.loot.SupplyDrops;
 import com.camjewell.bosstracker.loot.LootTracker;
 import com.camjewell.bosstracker.loot.UniqueSplits;
+import com.camjewell.bosstracker.persistence.BossLoot;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.ItemGoal;
 import com.camjewell.bosstracker.persistence.SessionHistoryEntry;
@@ -51,6 +52,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -265,6 +267,8 @@ public class BossTrackerPanel extends PluginPanel
 	private int lastRenderedHistoryVersion = -1;
 	private int lastRenderedHistoryHighlight;
 	private int lastRenderedLookupVersion = -1;
+	/** Whether a boss search shows its minion, perfect-kill, cache and supply loot in the main grid. */
+	private boolean lookupLootGrouped;
 	private int lastRenderedSearchHistoryVersion = -1;
 	private String lastRenderedSearchQuery;
 
@@ -2515,7 +2519,18 @@ public class BossTrackerPanel extends PluginPanel
 	private JPanel buildLookupResultPanel(Boss boss)
 	{
 		BossStats stats = lookupManager.getStats();
-		Map<Integer, Integer> lootMap = lookupManager.getLootItemQuantities();
+		BossLoot loot = lookupManager.getLoot();
+		Map<Integer, Integer> lootMap = loot.getItemQuantities();
+		List<LookupExtraLoot> extras = lookupExtraLoot(loot);
+		boolean grouped = lookupLootGrouped && !extras.isEmpty();
+		Map<Integer, Integer> shownLoot = new HashMap<>(lootMap);
+		if (grouped)
+		{
+			for (LookupExtraLoot extra : extras)
+			{
+				extra.loot.forEach((itemId, quantity) -> shownLoot.merge(itemId, quantity, Integer::sum));
+			}
+		}
 
 		JPanel resultPanel = new JPanel(new BorderLayout())
 		{
@@ -2539,7 +2554,7 @@ public class BossTrackerPanel extends PluginPanel
 
 		JButton deleteButton = new JButton("Delete Data");
 		styleButton(deleteButton);
-		deleteButton.setEnabled(stats.getKillsTracked() > 0 || !lootMap.isEmpty());
+		deleteButton.setEnabled(stats.getKillsTracked() > 0 || !lootMap.isEmpty() || !extras.isEmpty());
 		deleteButton.addActionListener(e ->
 		{
 			int confirm = JOptionPane.showConfirmDialog(this,
@@ -2589,10 +2604,14 @@ public class BossTrackerPanel extends PluginPanel
 		}
 
 		List<TeammateUnique> teammateUniques = boss.isRaid() ? lifetimeTeammateUniques(boss) : Collections.emptyList();
-		if (!lootMap.isEmpty())
+		if (!extras.isEmpty())
+		{
+			detailPanel.add(buildLookupGroupToggle());
+		}
+		if (!shownLoot.isEmpty())
 		{
 			double totalGp = 0;
-			for (Map.Entry<Integer, Integer> entry : lootMap.entrySet())
+			for (Map.Entry<Integer, Integer> entry : shownLoot.entrySet())
 			{
 				totalGp += (double) priceCache.getPrice(entry.getKey()) * entry.getValue();
 			}
@@ -2620,7 +2639,7 @@ public class BossTrackerPanel extends PluginPanel
 			detailPanel.add(sectionDivider());
 
 			// Highest value first, like the session and History grids.
-			List<Map.Entry<Integer, Integer>> items = new ArrayList<>(lootMap.entrySet());
+			List<Map.Entry<Integer, Integer>> items = new ArrayList<>(shownLoot.entrySet());
 			items.sort(Comparator.comparingDouble((Map.Entry<Integer, Integer> item) ->
 				(double) priceCache.getPrice(item.getKey()) * item.getValue()).reversed());
 
@@ -2650,6 +2669,15 @@ public class BossTrackerPanel extends PluginPanel
 			}
 			detailPanel.add(lootGrid);
 		}
+		if (!grouped)
+		{
+			for (LookupExtraLoot extra : extras)
+			{
+				detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+				detailPanel.add(buildExtraLootSection(extra.title, extra.loot, extra.countKey, extra.count, "Total GP",
+					priceCache::getPrice));
+			}
+		}
 
 		if (!teammateUniques.isEmpty())
 		{
@@ -2675,6 +2703,71 @@ public class BossTrackerPanel extends PluginPanel
 		resultPanel.add(detailPanel, BorderLayout.CENTER);
 		resultPanel.add(deleteButtonPanel, BorderLayout.SOUTH);
 		return resultPanel;
+	}
+
+	/** One of a boss's loot sections beside its own drops, for the boss search. */
+	private static final class LookupExtraLoot
+	{
+		final String title;
+		final String countKey;
+		final int count;
+		final Map<Integer, Integer> loot;
+
+		LookupExtraLoot(String title, String countKey, int count, Map<Integer, Integer> loot)
+		{
+			this.title = title;
+			this.countKey = countKey;
+			this.count = count;
+			this.loot = loot;
+		}
+	}
+
+	/** The sections a boss has loot in, titled as on the Session tab, in the same order. */
+	private static List<LookupExtraLoot> lookupExtraLoot(BossLoot loot)
+	{
+		List<LookupExtraLoot> extras = new ArrayList<>();
+		addLookupExtra(extras, "Minion Loot", "Minion Kills", loot.getMinionKills(), loot.getMinionItemQuantities());
+		addLookupExtra(extras, "Perfect Kill Bonus", "Perfect Kills", loot.getPerfectKills(), loot.getPerfectBonusItemQuantities());
+		addLookupExtra(extras, "Cache Loot", "Caches Opened", loot.getCachesOpened(), loot.getCacheItemQuantities());
+		addLookupExtra(extras, "Supplies", "Supply Drops", loot.getSupplyDrops(), loot.getSupplyItemQuantities());
+		return extras;
+	}
+
+	private static void addLookupExtra(List<LookupExtraLoot> extras, String title, String countKey, int count,
+		Map<Integer, Integer> loot)
+	{
+		if (loot != null && !loot.isEmpty())
+		{
+			extras.add(new LookupExtraLoot(title, countKey, count, loot));
+		}
+	}
+
+	/** Switches the boss search between one grid of all its loot and a grid per section. */
+	private JPanel buildLookupGroupToggle()
+	{
+		JToggleButton button = createDarkToggleButton("Group Loot");
+		button.setSelected(lookupLootGrouped);
+		button.setFocusPainted(false);
+		button.setToolTipText("Show minion, perfect-kill, cache and supply loot in the main grid and totals");
+		button.addActionListener(e ->
+		{
+			lookupLootGrouped = button.isSelected();
+			lastRenderedLookupVersion = -1;
+			refreshSearchPanel();
+		});
+
+		JPanel row = new JPanel(new GridLayout(1, 1))
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		row.setOpaque(false);
+		row.setBorder(new EmptyBorder(6, 0, 4, 0));
+		row.add(button);
+		return row;
 	}
 
 	/** A thin full-width line between two sections of a panel. */
@@ -3743,11 +3836,23 @@ public class BossTrackerPanel extends PluginPanel
 	private JPanel buildHistoryExtraSection(SessionHistoryEntry entry, Map<Integer, Integer> extraLoot, String killsKey,
 		int kills, String gpKey)
 	{
+		return buildExtraLootSection(null, extraLoot, killsKey, kills, gpKey, itemId -> historyPrice(entry, itemId));
+	}
+
+	/**
+	 * A loot section under a boss's own grid, for History and the boss search: an optional title,
+	 * then its count and value, then its grid.
+	 *
+	 * @param price what one of an item is worth here: a saved session's price, or today's
+	 */
+	private JPanel buildExtraLootSection(String title, Map<Integer, Integer> extraLoot, String killsKey, int kills,
+		String gpKey, IntToLongFunction price)
+	{
 		Map<Integer, Double> valueByItem = new LinkedHashMap<>();
 		double totalGp = 0;
 		for (Map.Entry<Integer, Integer> item : extraLoot.entrySet())
 		{
-			double value = (double) historyPrice(entry, item.getKey()) * item.getValue();
+			double value = (double) price.applyAsLong(item.getKey()) * item.getValue();
 			valueByItem.put(item.getKey(), value);
 			totalGp += value;
 		}
@@ -3758,6 +3863,19 @@ public class BossTrackerPanel extends PluginPanel
 		section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
 		section.setOpaque(false);
 		section.setBorder(new CompoundBorder(new MatteBorder(1, 0, 0, 0, new Color(49, 49, 49)), new EmptyBorder(8, 0, 0, 0)));
+
+		if (title != null)
+		{
+			JLabel titleLabel = new JLabel(title);
+			titleLabel.setFont(FontManager.getRunescapeSmallFont());
+			titleLabel.setForeground(Color.WHITE);
+			// A full-width row, so the title sits flush left like the stats beneath it.
+			JPanel titleRow = new JPanel(new BorderLayout());
+			titleRow.setOpaque(false);
+			titleRow.setBorder(new EmptyBorder(0, 0, 4, 0));
+			titleRow.add(titleLabel, BorderLayout.WEST);
+			section.add(titleRow);
+		}
 
 		JPanel statsRow = new JPanel(new GridLayout(1, 2));
 		statsRow.setOpaque(false);
@@ -3779,7 +3897,7 @@ public class BossTrackerPanel extends PluginPanel
 			int quantity = extraLoot.get(itemId);
 			JLabel itemLabel = new JLabel();
 			itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
-			itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, historyPrice(entry, itemId), valueByItem.get(itemId)));
+			itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, price.applyAsLong(itemId), valueByItem.get(itemId)));
 			itemManager.getImage(itemId, quantity, quantity > 1).addTo(itemLabel);
 
 			JPanel slot = new JPanel(new BorderLayout());

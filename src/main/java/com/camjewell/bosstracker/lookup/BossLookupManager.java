@@ -6,7 +6,7 @@ import com.camjewell.bosstracker.persistence.BossLootStore;
 import com.camjewell.bosstracker.persistence.BossStats;
 import com.camjewell.bosstracker.persistence.BossStatsStore;
 import com.camjewell.bosstracker.util.ItemPriceCache;
-import java.util.LinkedHashMap;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import javax.inject.Inject;
@@ -40,19 +40,23 @@ public class BossLookupManager
 	private ItemPriceCache priceCache;
 
 	@Getter
-	private Boss boss;
+	private volatile Boss boss;
 
 	@Getter
-	private BossStats stats = new BossStats();
+	private volatile BossStats stats = new BossStats();
+
+	/**
+	 * The looked-up boss's loot, every section of it. Replaced whole when a lookup lands, never
+	 * changed in place, as the panel reads it on the Swing thread.
+	 */
+	@Getter
+	private volatile BossLoot loot = new BossLoot();
 
 	@Getter
-	private final Map<Integer, Integer> lootItemQuantities = new LinkedHashMap<>();
-
-	@Getter
-	private int version;
+	private volatile int version;
 
 	private Executor asyncExecutor;
-	private Boss pendingBoss;
+	private volatile Boss pendingBoss;
 
 	/**
 	 * Must be called once by the plugin during startUp() with an executor that runs off the
@@ -83,21 +87,28 @@ public class BossLookupManager
 
 			if (pendingBoss == boss)
 			{
-				this.boss = boss;
-				this.stats = loadedStats;
-				lootItemQuantities.clear();
-				lootItemQuantities.putAll(loadedLoot.getItemQuantities());
-
 				// See LootTracker.ensureLoaded: warm the price cache on the client thread
 				// before bumping version, since getItemPrice() falls back to a
 				// client-thread-only call when an item isn't already cached.
 				clientThread.invoke(() ->
 				{
-					for (int itemId : loadedLoot.getItemQuantities().keySet())
+					for (Map<Integer, Integer> section : Arrays.asList(loadedLoot.getItemQuantities(),
+						loadedLoot.getMinionItemQuantities(), loadedLoot.getPerfectBonusItemQuantities(),
+						loadedLoot.getCacheItemQuantities(), loadedLoot.getSupplyItemQuantities()))
 					{
-						priceCache.warm(itemId);
+						for (int itemId : section.keySet())
+						{
+							priceCache.warm(itemId);
+						}
 					}
-					version++;
+					// Published together, so the panel never shows one boss's stats with another's loot.
+					if (pendingBoss == boss)
+					{
+						this.boss = boss;
+						stats = loadedStats;
+						loot = loadedLoot;
+						version++;
+					}
 				});
 			}
 		});
@@ -108,7 +119,7 @@ public class BossLookupManager
 		pendingBoss = null;
 		boss = null;
 		stats = new BossStats();
-		lootItemQuantities.clear();
+		loot = new BossLoot();
 		version++;
 	}
 
