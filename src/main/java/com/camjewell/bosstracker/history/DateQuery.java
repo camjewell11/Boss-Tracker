@@ -18,6 +18,7 @@ import lombok.Value;
  * "10/17/2026", "2026-10-17"</li>
  * <li>Months: "October", "Oct 2026", "10/2026", "2026-10"</li>
  * <li>Years: "2026"</li>
+ * <li>Everything: "all time"</li>
  * </ul>
  *
  * Without a year, a day or month means its most recent occurrence, so in October "Dec 25" is
@@ -31,7 +32,7 @@ public final class DateQuery
 		/** First and last day, inclusive. */
 		LocalDate start;
 		LocalDate end;
-		/** How to name the range: "Sat, Oct 17", "October 2026" or "2026". */
+		/** How to name the range: "Sat, Oct 17", "October 2026", "2026" or "All time". */
 		String label;
 
 		public boolean contains(LocalDate day)
@@ -56,6 +57,9 @@ public final class DateQuery
 	private static final Pattern DAY_MONTH = Pattern.compile("^(\\d{1,2})\\s+([a-z]{3,9})\\.?(?:\\s+(\\d{4}))?$");
 	private static final Pattern MONTH_ONLY = Pattern.compile("^([a-z]{3,9})\\.?(?:,?\\s+(\\d{4}))?$");
 	private static final Pattern YEAR_ONLY = Pattern.compile("^(20\\d{2})$");
+
+	/** Every saved session, for "all time". */
+	private static final Range ALL_TIME = new Range(LocalDate.MIN, LocalDate.MAX, "All time");
 
 	private DateQuery()
 	{
@@ -84,6 +88,10 @@ public final class DateQuery
 
 	private static Range parseLowercase(String q, LocalDate today)
 	{
+		if (q.equals("all time") || q.equals("alltime"))
+		{
+			return ALL_TIME;
+		}
 		if (q.equals("today"))
 		{
 			return day(today);

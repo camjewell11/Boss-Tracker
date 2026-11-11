@@ -2,6 +2,7 @@ package com.camjewell.bosstracker.history;
 
 import java.time.LocalDate;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
@@ -79,6 +80,19 @@ public class DateQueryTest
 	{
 		assertDay(LocalDate.of(2025, 12, 25), "Dec 25");
 		assertRange(LocalDate.of(2025, 12, 1), LocalDate.of(2025, 12, 31), "December");
+	}
+
+	@Test
+	public void allTimeCoversEverySession()
+	{
+		for (String query : new String[]{"all time", "All Time", "alltime"})
+		{
+			DateQuery.Range range = DateQuery.parse(query, TODAY);
+			assertEquals(query, "All time", range.getLabel());
+			assertTrue(query, range.contains(LocalDate.of(2001, 1, 1)));
+			assertTrue(query, range.contains(TODAY));
+			assertFalse(query, range.isSingleDay());
+		}
 	}
 
 	@Test
