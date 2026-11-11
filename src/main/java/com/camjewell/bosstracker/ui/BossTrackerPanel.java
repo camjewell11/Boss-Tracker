@@ -5,6 +5,7 @@ import com.camjewell.bosstracker.boss.Boss;
 import com.camjewell.bosstracker.history.DateQuery;
 import com.camjewell.bosstracker.history.DryStreak;
 import com.camjewell.bosstracker.history.ItemDropSearch;
+import com.camjewell.bosstracker.history.LootSummary;
 import com.camjewell.bosstracker.history.SessionHistoryManager;
 import com.camjewell.bosstracker.lookup.BossLookupManager;
 import com.camjewell.bosstracker.loot.DropTables;
@@ -282,6 +283,10 @@ public class BossTrackerPanel extends PluginPanel
 	 * away to another tab and back.
 	 */
 	private final Set<Long> expandedHistoryEntryIds = new HashSet<>();
+	/** Which loot summaries are open: History's and the date search's, by their keys below. */
+	private final Set<String> expandedLootSummaries = new HashSet<>();
+	private static final String HISTORY_LOOT_SUMMARY = "history";
+	private static final String SEARCH_LOOT_SUMMARY = "search";
 
 	private final JTextField searchField = new JTextField();
 	private final JLabel searchResultLabel = new JLabel();
@@ -2395,6 +2400,7 @@ public class BossTrackerPanel extends PluginPanel
 				{
 					searchResultPanel.add(buildDateRangeHeader(searchRange, rangeSessions));
 				}
+				searchResultPanel.add(buildLootSummary(SEARCH_LOOT_SUMMARY, rangeSessions));
 				int hidden = addSessionsByDay(searchResultPanel, rangeSessions, searchRowLimit);
 				addShowMoreButton(searchResultPanel, hidden, () ->
 				{
@@ -3192,6 +3198,8 @@ public class BossTrackerPanel extends PluginPanel
 		}
 		else
 		{
+			// Totals what the filters show, so it covers one boss, or every raid, as chosen.
+			historyEntriesPanel.add(buildLootSummary(HISTORY_LOOT_SUMMARY, shown));
 			int hidden;
 			if (SORT_VALUE.equals(historySortOrder.getSelectedItem()))
 			{
@@ -3394,6 +3402,153 @@ public class BossTrackerPanel extends PluginPanel
 		header.setBorder(new EmptyBorder(6, 2, 3, 2));
 		header.add(label, BorderLayout.CENTER);
 		return header;
+	}
+
+	/**
+	 * A collapsible block totalling these sessions' loot: their kills, time and value, then one
+	 * grid of everything they dropped, and their minion, perfect-kill, cache and supply loot
+	 * apart, as each session shows them. Built on first expand, like History's rows.
+	 *
+	 * @param key which summary this is, so each list remembers whether it's open
+	 */
+	private JPanel buildLootSummary(String key, List<SessionHistoryEntry> sessions)
+	{
+		LootSummary summary = LootSummary.of(sessions, this::historyPrice);
+		LootSummary.Section loot = summary.getLoot();
+
+		JPanel block = new JPanel(new BorderLayout())
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+			}
+		};
+		block.setBorder(new CompoundBorder(new EmptyBorder(0, 0, 4, 0), new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49))));
+		block.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+
+		JToggleButton expandButton = new JToggleButton("Loot Summary");
+		expandButton.setHorizontalAlignment(SwingConstants.LEFT);
+		expandButton.setSelected(expandedLootSummaries.contains(key));
+		styleButton(expandButton);
+		expandButton.setToolTipText("Everything these sessions dropped, valued at each session's prices");
+
+		JLabel overview = new JLabel(summary.getSessions() + (summary.getSessions() == 1 ? " session · " : " sessions · ")
+			+ summary.getKills() + (summary.getKills() == 1 ? " kill · " : " kills · ") + GpFormat.abbreviated(loot.getTotalValue()));
+		overview.setFont(FontManager.getRunescapeSmallFont());
+		overview.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+		overview.setBorder(new EmptyBorder(2, 8, 2, 8));
+
+		JPanel header = new JPanel(new BorderLayout());
+		header.setOpaque(false);
+		header.add(expandButton, BorderLayout.NORTH);
+		header.add(overview, BorderLayout.SOUTH);
+
+		JPanel detailHolder = new JPanel(new BorderLayout());
+		detailHolder.setOpaque(false);
+		Runnable buildDetails = () ->
+		{
+			if (detailHolder.getComponentCount() == 0)
+			{
+				detailHolder.add(buildLootSummaryDetail(summary, sessions), BorderLayout.CENTER);
+			}
+		};
+		if (expandButton.isSelected())
+		{
+			buildDetails.run();
+		}
+		detailHolder.setVisible(expandButton.isSelected());
+		expandButton.addActionListener(e ->
+		{
+			boolean expanded = expandButton.isSelected();
+			if (expanded)
+			{
+				buildDetails.run();
+				expandedLootSummaries.add(key);
+			}
+			else
+			{
+				expandedLootSummaries.remove(key);
+			}
+			detailHolder.setVisible(expanded);
+			block.revalidate();
+			block.repaint();
+		});
+
+		block.add(header, BorderLayout.NORTH);
+		block.add(detailHolder, BorderLayout.CENTER);
+		return block;
+	}
+
+	private JPanel buildLootSummaryDetail(LootSummary summary, List<SessionHistoryEntry> sessions)
+	{
+		LootSummary.Section loot = summary.getLoot();
+		JPanel detailPanel = new JPanel();
+		detailPanel.setLayout(new BoxLayout(detailPanel, BoxLayout.Y_AXIS));
+		detailPanel.setOpaque(false);
+		detailPanel.setBorder(new EmptyBorder(6, 8, 6, 8));
+
+		int kills = summary.getKills();
+		double totalGp = loot.getTotalValue();
+		List<JLabel> stats = new ArrayList<>(Arrays.asList(
+			new JLabel(htmlLabel("Kills: ", String.format("%,d", kills))),
+			new JLabel(htmlLabel("Time: ", TimeFormat.minutesSeconds((int) Math.min(summary.getSeconds(), Integer.MAX_VALUE)))),
+			new JLabel(htmlLabel("GP/Kill: ", kills > 0 ? GpFormat.compact(totalGp / kills) : "N/A")),
+			new JLabel(htmlLabel("Total GP: ", GpFormat.compact(totalGp)))));
+		double afterSplits = 0;
+		for (SessionHistoryEntry entry : sessions)
+		{
+			afterSplits += historySplitValue(entry);
+		}
+		if (Math.abs(afterSplits - totalGp) >= 1)
+		{
+			JLabel afterSplitsLabel = new JLabel(htmlLabel("After Splits: ", GpFormat.compact(afterSplits)));
+			afterSplitsLabel.setToolTipText("After your uniques' splits (less GE tax on split items) and your shares of teammates' uniques");
+			stats.add(afterSplitsLabel);
+		}
+		detailPanel.add(createStatsPanel(stats.toArray(new JLabel[0])));
+
+		if (!loot.isEmpty())
+		{
+			detailPanel.add(sectionDivider());
+			List<Integer> itemIds = new ArrayList<>(loot.getQuantities().keySet());
+			itemIds.sort((a, b) -> Double.compare(loot.getValues().get(b), loot.getValues().get(a)));
+			JPanel lootGrid = new JPanel(new GridLayout(0, LOOT_GRID_COLUMNS, 2, 2));
+			lootGrid.setOpaque(false);
+			for (int itemId : itemIds)
+			{
+				int quantity = loot.getQuantities().get(itemId);
+				JLabel itemLabel = new JLabel();
+				itemLabel.setHorizontalAlignment(SwingConstants.CENTER);
+				itemLabel.setToolTipText(buildLootTooltip(itemId, quantity, loot.averagePrice(itemId), loot.getValues().get(itemId)));
+				itemManager.getImage(itemId, quantity, quantity > 1).addTo(itemLabel);
+
+				JPanel slot = new JPanel(new BorderLayout());
+				slot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+				slot.setBorder(new MatteBorder(1, 1, 1, 1, new Color(49, 49, 49)));
+				slot.setPreferredSize(new Dimension(40, 40));
+				slot.add(itemLabel, BorderLayout.CENTER);
+				lootGrid.add(slot);
+			}
+			detailPanel.add(lootGrid);
+		}
+
+		addLootSummarySection(detailPanel, "Minion Loot", "Minion Kills", summary.getMinionLoot());
+		addLootSummarySection(detailPanel, "Perfect Kill Bonus", "Perfect Kills", summary.getPerfectBonus());
+		addLootSummarySection(detailPanel, "Cache Loot", "Caches Opened", summary.getCacheLoot());
+		addLootSummarySection(detailPanel, "Supplies", "Supply Drops", summary.getSupplies());
+		return detailPanel;
+	}
+
+	private void addLootSummarySection(JPanel detailPanel, String title, String countKey, LootSummary.Section section)
+	{
+		if (section.isEmpty())
+		{
+			return;
+		}
+		detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+		detailPanel.add(buildExtraLootSection(title, section.getQuantities(), countKey, section.getCount(), "Total GP",
+			section::averagePrice));
 	}
 
 	/** One label per value tier in its own colour, then "Pet" in gold, when highlighting is on. */
