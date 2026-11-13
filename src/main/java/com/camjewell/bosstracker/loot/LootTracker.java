@@ -123,6 +123,12 @@ public class LootTracker
 	@Getter
 	private int lifetimeSupplyDrops;
 
+	/** Supplies that didn't fit in the backpack, matched up with their loot event. */
+	private final FloorSupplies floorSupplies = new FloorSupplies();
+
+	/** The game tick a supply drop was last counted, so its floor spawns don't count another. */
+	private int supplyDropTick = -1;
+
 	private Map<Integer, Integer> goalLoot = Collections.emptyMap();
 	private int goalLootVersion = -1;
 
@@ -400,7 +406,25 @@ public class LootTracker
 			}
 		}
 
+		if (SupplyDrops.landsInBackpack(sessionBoss))
+		{
+			int tick = client.getTickCount();
+			for (ItemStack stack : floorSupplies.onLoot(sessionBoss, tick))
+			{
+				priceCache.warm(stack.getId());
+				supplyItems.add(stack);
+			}
+			if (!supplyItems.isEmpty())
+			{
+				supplyDropTick = tick;
+			}
+		}
+
 		for (ItemStack stack : items)
+		{
+			sessionDropPrices.put(stack.getId(), priceCache.getPrice(stack.getId()));
+		}
+		for (ItemStack stack : supplyItems)
 		{
 			sessionDropPrices.put(stack.getId(), priceCache.getPrice(stack.getId()));
 		}
@@ -420,7 +444,7 @@ public class LootTracker
 		}
 		if (!supplyItems.isEmpty())
 		{
-			recordSupplies(sessionBoss, supplyItems);
+			recordSupplies(sessionBoss, supplyItems, true);
 		}
 
 		version++;
@@ -522,17 +546,54 @@ public class LootTracker
 		});
 	}
 
-	/** Records a kill's supply drop, kept out of the boss's loot totals and goals like minion drops. */
-	private void recordSupplies(Boss boss, List<ItemStack> supplyItems)
+	/**
+	 * Called on the client thread for each item spawned on the ground. Counts it as one of
+	 * {@code sessionBoss}'s supplies if it's one that didn't fit in the backpack (see
+	 * {@link SupplyDrops#landsInBackpack}).
+	 *
+	 * @return whether it was counted
+	 */
+	public boolean onItemSpawned(Boss sessionBoss, int itemId, int quantity)
 	{
-		log.debug("Supplies from {}: {}", boss, supplyItems);
+		if (!SupplyDrops.landsInBackpack(sessionBoss) || !SupplyDrops.isSupply(sessionBoss, itemId, quantity))
+		{
+			return false;
+		}
+		int tick = client.getTickCount();
+		ItemStack stack = floorSupplies.onSpawn(sessionBoss, tick, new ItemStack(itemId, quantity));
+		if (stack == null)
+		{
+			// Held until this tick's loot event, if one comes.
+			return false;
+		}
+		priceCache.warm(itemId);
+		sessionDropPrices.put(itemId, priceCache.getPrice(itemId));
+		boolean newDrop = supplyDropTick != tick;
+		supplyDropTick = tick;
+		recordSupplies(sessionBoss, Collections.singletonList(stack), newDrop);
+		version++;
+		return true;
+	}
+
+	/**
+	 * Records a kill's supply drop, kept out of the boss's loot totals and goals like minion drops.
+	 *
+	 * @param newDrop false for supplies that landed on the floor after the rest of their drop was
+	 * counted, so the drop isn't counted twice
+	 */
+	private void recordSupplies(Boss boss, List<ItemStack> supplyItems, boolean newDrop)
+	{
+		log.debug("Supplies from {}: {}{}", boss, supplyItems, newDrop ? "" : " (on the floor)");
 		for (ItemStack stack : supplyItems)
 		{
 			sessionSupplyLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
 			lifetimeSupplyLoot.merge(stack.getId(), stack.getQuantity(), Integer::sum);
 		}
-		sessionSupplyDrops++;
-		lifetimeSupplyDrops++;
+		if (newDrop)
+		{
+			sessionSupplyDrops++;
+			lifetimeSupplyDrops++;
+		}
 
 		if (asyncExecutor == null)
 		{
@@ -546,7 +607,10 @@ public class LootTracker
 			{
 				loot.getSupplyItemQuantities().merge(stack.getId(), stack.getQuantity(), Integer::sum);
 			}
-			loot.setSupplyDrops(loot.getSupplyDrops() + 1);
+			if (newDrop)
+			{
+				loot.setSupplyDrops(loot.getSupplyDrops() + 1);
+			}
 			lootStore.save(accountHash, boss, loot);
 		});
 	}

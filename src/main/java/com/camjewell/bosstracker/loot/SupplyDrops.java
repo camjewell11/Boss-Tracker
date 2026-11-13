@@ -75,6 +75,15 @@ public final class SupplyDrops
 		return boss != null && TABLES.containsKey(boss);
 	}
 
+	/**
+	 * Whether {@code boss}'s supplies go straight to the backpack, as the Maggot King's do from its
+	 * stomach. Its loot event then counts only those that fit; the rest land on the floor uncounted.
+	 */
+	public static boolean landsInBackpack(Boss boss)
+	{
+		return boss == Boss.MAGGOT_KING;
+	}
+
 	/** Whether this drop of {@code boss}'s came from its supply roll rather than its loot. */
 	public static boolean isSupply(Boss boss, int itemId, int quantity)
 	{

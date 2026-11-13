@@ -26,11 +26,13 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.NPC;
+import net.runelite.api.TileItem;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.HitsplatApplied;
+import net.runelite.api.events.ItemSpawned;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.client.callback.ClientThread;
@@ -315,6 +317,24 @@ public class BossTrackerPlugin extends Plugin
 		}
 		unrecognisedCapture.onLootReceived(event.getName(), event.getType().name(), event.getItems());
 		panel.requestRefresh();
+	}
+
+	/** Catches supplies that didn't fit in the backpack, which the loot event leaves out. */
+	@Subscribe
+	public void onItemSpawned(ItemSpawned event)
+	{
+		BossSession session = sessionManager.getSession();
+		TileItem item = event.getItem();
+		if (session == null || item.getOwnership() == TileItem.OWNERSHIP_OTHER
+			|| item.getOwnership() == TileItem.OWNERSHIP_GROUP)
+		{
+			return;
+		}
+		if (lootTracker.onItemSpawned(session.getBoss(), item.getId(), item.getQuantity()))
+		{
+			log.debug("Supply on the floor counted: item={} qty={} ownership={}", item.getId(), item.getQuantity(), item.getOwnership());
+			panel.requestRefresh();
+		}
 	}
 
 	@Subscribe
